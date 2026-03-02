@@ -10,6 +10,7 @@ import type {
   ScoringResult,
   CategoryScore,
   MetricScore,
+  Grade,
   AnalyzerStatus,
 } from '../core/types.js';
 import type { Rubric, CategoryDefinition, GradeBoundaries } from './rubric.js';
@@ -123,14 +124,14 @@ function computeGrade(
   normalizedScore: number,
   analysisCompleteness: number,
   boundaries: GradeBoundaries,
-): string {
+): Grade {
   if (analysisCompleteness < 60) {
     return 'INCOMPLETE';
   }
 
   // Grade boundaries are sorted highest first
   const gradeKeys = ['A', 'B', 'C', 'D', 'F'] as const;
-  const grades: Array<[string, number]> = gradeKeys.map((k) => [k, boundaries[k]]);
+  const grades: Array<[Grade, number]> = gradeKeys.map((k) => [k, boundaries[k]]);
   grades.sort(([, a], [, b]) => b - a);
   for (const [grade, minScore] of grades) {
     if (normalizedScore >= minScore) {
@@ -153,34 +154,17 @@ export function computeScoring(report: ReportData, rubric: Rubric): ScoringResul
   let totalScore = 0;
   let totalPossible = 0;
 
-  // Count how many analyzers completed (out of 12 total)
-  const analyzerKeys: Array<keyof ReportData> = [
-    'sizing', 'structure', 'repoHealth', 'complexity',
-    'testAnalysis', 'git', 'dependencies', 'security',
-    'techStack', 'envVars', 'duplication', 'architecture',
-  ];
-  const totalAnalyzers = analyzerKeys.length;
-  let completedAnalyzers = 0;
-
-  for (const key of analyzerKeys) {
-    const result = report[key];
-    if (
-      result &&
-      typeof result === 'object' &&
-      'meta' in result &&
-      (result as { meta: { status: AnalyzerStatus } }).meta.status === 'computed'
-    ) {
-      completedAnalyzers++;
-    }
-  }
-
-  const analysisCompleteness = (completedAnalyzers / totalAnalyzers) * 100;
+  // Read completeness from orchestrator (single source of truth)
+  const analysisCompleteness = report.meta.analysisCompleteness;
 
   for (const [categoryName, categoryDef] of Object.entries(rubric.categories)) {
     const extractor = CATEGORY_EXTRACTORS[categoryName];
 
     // Skip categories we don't have an extractor for
-    if (!extractor) continue;
+    if (!extractor) {
+      console.warn(`[scoring] Rubric category "${categoryName}" has no registered extractor — skipping`);
+      continue;
+    }
 
     const status = extractor.status(report);
 
@@ -197,9 +181,10 @@ export function computeScoring(report: ReportData, rubric: Rubric): ScoringResul
     totalPossible += categoryResult.maxScore;
   }
 
-  const normalizedScore = totalPossible > 0
+  const rawNormalized = totalPossible > 0
     ? (totalScore / totalPossible) * 100
     : 0;
+  const normalizedScore = Number.isFinite(rawNormalized) ? rawNormalized : 0;
 
   const grade = computeGrade(
     normalizedScore,
@@ -227,6 +212,9 @@ function scoreCategory(
 
   for (const [metricName, metricDef] of Object.entries(categoryDef.metrics)) {
     const value = metricValues[metricName];
+    if (value === undefined) {
+      console.warn(`[scoring] Metric "${metricName}" in category "${categoryName}" has no extracted value`);
+    }
     const result = scoreMetric(
       metricName,
       value,

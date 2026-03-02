@@ -211,49 +211,22 @@ export async function analyzeRepository(
     emptyTestAnalysis,
   );
 
-  // These analyzers are independent — run them all
-  const structure = await runWithTiming('structure', () => analyzeStructure(index), emptyStructure);
-  const repoHealth = await runWithTiming(
-    'repoHealth',
-    () => analyzeRepoHealth(index),
-    emptyRepoHealth,
-  );
-  const complexity = await runWithTiming(
-    'complexity',
-    () => analyzeComplexity(index),
-    emptyComplexity,
-  );
-  const git = await runWithTiming('git', () => analyzeGit(index), emptyGit);
-  const dependencies = await runWithTiming(
-    'dependencies',
-    () => analyzeDependencies(index),
-    emptyDependencies,
-  );
-  const security = await runWithTiming(
-    'security',
-    () => analyzeSecurity(index),
-    emptySecurity,
-  );
-  const techStack = await runWithTiming(
-    'techStack',
-    () => analyzeTechStack(index),
-    emptyTechStack,
-  );
-  const envVars = await runWithTiming(
-    'envVars',
-    () => analyzeEnvVars(index),
-    emptyEnvVars,
-  );
-  const duplication = await runWithTiming(
-    'duplication',
-    () => analyzeDuplication(index),
-    emptyDuplication,
-  );
-  const architecture = await runWithTiming(
-    'architecture',
-    () => analyzeArchitecture(index),
-    emptyArchitecture,
-  );
+  // These analyzers are independent — run them concurrently
+  const [
+    structure, repoHealth, complexity, git, dependencies,
+    security, techStack, envVars, duplication, architecture,
+  ] = await Promise.all([
+    runWithTiming('structure', () => analyzeStructure(index), emptyStructure),
+    runWithTiming('repoHealth', () => analyzeRepoHealth(index), emptyRepoHealth),
+    runWithTiming('complexity', () => analyzeComplexity(index), emptyComplexity),
+    runWithTiming('git', () => analyzeGit(index), emptyGit),
+    runWithTiming('dependencies', () => analyzeDependencies(index), emptyDependencies),
+    runWithTiming('security', () => analyzeSecurity(index), emptySecurity),
+    runWithTiming('techStack', () => analyzeTechStack(index), emptyTechStack),
+    runWithTiming('envVars', () => analyzeEnvVars(index), emptyEnvVars),
+    runWithTiming('duplication', () => analyzeDuplication(index), emptyDuplication),
+    runWithTiming('architecture', () => analyzeArchitecture(index), emptyArchitecture),
+  ]);
 
   // Calculate analysis completeness
   const allAnalyzers = [

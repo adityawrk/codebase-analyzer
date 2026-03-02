@@ -367,7 +367,7 @@ export interface ReportMeta {
   analyzerVersion: string;
   directory: string;
   analysisCompleteness: number;
-  grade?: string;
+  grade?: Grade;
   score?: number;
   durationMs?: number;
 }
@@ -391,6 +391,8 @@ export interface ReportData {
 
 // -- Scoring --
 
+export type Grade = 'A' | 'B' | 'C' | 'D' | 'F' | 'INCOMPLETE';
+
 export interface MetricScore {
   score: number;
   maxScore: number;
@@ -408,6 +410,6 @@ export interface ScoringResult {
   totalScore: number;
   totalPossible: number;
   normalizedScore: number;
-  grade: string;
+  grade: Grade;
   categories: Record<string, CategoryScore>;
 }

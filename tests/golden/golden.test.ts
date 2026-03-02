@@ -12,7 +12,7 @@ import addFormats from 'ajv-formats';
 import { analyzeRepository } from '../../src/core/orchestrator.js';
 import { formatMarkdown } from '../../src/output/markdown.js';
 import { DEFAULT_CONFIG } from '../../src/core/types.js';
-import type { AnalysisConfig, ReportData } from '../../src/core/types.js';
+import type { AnalysisConfig, ReportData, Grade } from '../../src/core/types.js';
 
 const PROJECT_ROOT = path.resolve('.');
 
@@ -173,6 +173,54 @@ describe('Golden output tests', { timeout: 60000 }, () => {
       expect(markdownOutput.length).toBeGreaterThan(0);
       const lineCount = markdownOutput.split('\n').length;
       expect(lineCount).toBeGreaterThan(100);
+    });
+  });
+
+  // --- (e) Scoring output validation ---
+
+  describe('Scoring output validation', () => {
+    const VALID_GRADES: Grade[] = ['A', 'B', 'C', 'D', 'F', 'INCOMPLETE'];
+
+    it('report.scoring is populated', () => {
+      expect(report.scoring).toBeDefined();
+      expect(report.scoring).not.toBeNull();
+    });
+
+    it('scoring has a valid grade', () => {
+      expect(VALID_GRADES).toContain(report.scoring!.grade);
+    });
+
+    it('scoring.normalizedScore is between 0 and 100', () => {
+      expect(report.scoring!.normalizedScore).toBeGreaterThanOrEqual(0);
+      expect(report.scoring!.normalizedScore).toBeLessThanOrEqual(100);
+    });
+
+    it('scoring.totalScore <= scoring.totalPossible', () => {
+      expect(report.scoring!.totalScore).toBeLessThanOrEqual(
+        report.scoring!.totalPossible,
+      );
+    });
+
+    it('scoring has at least 3 scored categories', () => {
+      const categoryCount = Object.keys(report.scoring!.categories).length;
+      expect(categoryCount).toBeGreaterThanOrEqual(3);
+    });
+
+    it('meta.grade matches scoring.grade', () => {
+      expect(report.meta.grade).toBe(report.scoring!.grade);
+    });
+
+    it('meta.score matches scoring.normalizedScore', () => {
+      expect(report.meta.score).toBe(report.scoring!.normalizedScore);
+    });
+
+    it('each scored category has score <= maxScore', () => {
+      for (const [catName, cat] of Object.entries(report.scoring!.categories)) {
+        expect(
+          cat.score,
+          `${catName}: score (${cat.score}) should be <= maxScore (${cat.maxScore})`,
+        ).toBeLessThanOrEqual(cat.maxScore);
+      }
     });
   });
 });
