@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:golden": "vitest run tests/golden/",
-    "update-golden": "UPDATE_GOLDEN=1 vitest run tests/golden/"
+    "update-golden": "UPDATE_GOLDEN=1 vitest run tests/golden/",
+    "build:binary": "bash scripts/build-binary.sh"
   },
   "dependencies": {
     "commander": "^14.0.3",

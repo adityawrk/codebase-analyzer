@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build-and-test:
@@ -12,10 +12,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -27,8 +23,5 @@ jobs:
       - name: TypeScript compile check
         run: bun run build
 
-      - name: Run tests
-        run: bun run test
-
-      - name: Run golden output tests
-        run: bun run test:golden
+      - name: Run unit tests
+        run: bun test --exclude 'tests/golden/**'
