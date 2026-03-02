@@ -95,4 +95,4 @@ bun run update-golden                # regenerate golden fixtures
 
 ## License
 
-[MIT](LICENSE)
+Proprietary. All rights reserved.
