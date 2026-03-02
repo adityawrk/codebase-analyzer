@@ -200,7 +200,14 @@ export async function analyzeRepository(
   const overallStart = performance.now();
 
   // Phase 1: Build the index (single-pass)
-  const index = await buildRepositoryIndex(absoluteRoot, config);
+  let index;
+  try {
+    index = await buildRepositoryIndex(absoluteRoot, config);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[orchestrator] Failed to build repository index: ${msg}`);
+    throw new Error(`Cannot analyze repository — index build failed: ${msg}`);
+  }
 
   // Phase 2: Run analyzers
   // Sizing must run first (testing depends on it)
@@ -236,8 +243,6 @@ export async function analyzeRepository(
   ];
   const computed = allAnalyzers.filter((a) => a.meta.status === 'computed').length;
   const completeness = Math.round((computed / allAnalyzers.length) * 100);
-
-  const overallDurationMs = Math.round(performance.now() - overallStart);
 
   // Build report object
   const report: ReportData = {

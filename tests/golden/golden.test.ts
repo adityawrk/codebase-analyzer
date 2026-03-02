@@ -222,5 +222,16 @@ describe('Golden output tests', { timeout: 60000 }, () => {
         ).toBeLessThanOrEqual(cat.maxScore);
       }
     });
+
+    it('each metric has score <= maxScore', () => {
+      for (const [catName, cat] of Object.entries(report.scoring!.categories)) {
+        for (const [metricName, metric] of Object.entries(cat.metrics)) {
+          expect(
+            metric.score,
+            `${catName}.${metricName}: score (${metric.score}) should be <= maxScore (${metric.maxScore})`,
+          ).toBeLessThanOrEqual(metric.maxScore);
+        }
+      }
+    });
   });
 });
