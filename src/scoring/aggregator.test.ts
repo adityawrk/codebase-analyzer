@@ -437,23 +437,23 @@ describe('computeScoring — grade boundaries', () => {
     expect(result.grade).toBe('A');
   });
 
-  it('assigns grade B for normalizedScore in [75, 90)', () => {
+  it('assigns grade B for normalizedScore in [70, 85)', () => {
     const rubric = loadRubric(RUBRIC_PATH);
     // Moderate scores across the board
     const report = makeFullReport({
-      godFileCount: 4,       // score 3/5
-      commentRatio: 0.08,    // score 3/5
-      testCodeRatio: 25,     // 0.25, score 9/15
+      godFileCount: 4,       // score 4/5
+      commentRatio: 0.08,    // score 4/5
+      testCodeRatio: 25,     // 0.25, score 12/15
       coverageConfigFound: false, // score 0/5
       testFrameworkCount: 1, // score 4/5
-      avgComplexity: 4,      // score 8/10
-      maxComplexity: 12,     // score 8/10
+      avgComplexity: 8,      // score 8/15
+      maxComplexity: 25,     // score 4/5
       treeDepth: 4,          // score 10/10
       filesPerFolder: 8,     // score 15/15
     });
     const result = computeScoring(report, rubric);
-    expect(result.normalizedScore).toBeGreaterThanOrEqual(75);
-    expect(result.normalizedScore).toBeLessThan(90);
+    expect(result.normalizedScore).toBeGreaterThanOrEqual(70);
+    expect(result.normalizedScore).toBeLessThan(85);
     expect(result.grade).toBe('B');
   });
 
@@ -483,16 +483,16 @@ describe('computeScoring — grade boundaries', () => {
     expect(result.grade).toBe('F');
   });
 
-  it('assigns grade D for scores in [40, 60)', () => {
+  it('assigns grade D for scores in [35, 55)', () => {
     const rubric = loadRubric(RUBRIC_PATH);
     const report = makeFullReport({
-      godFileCount: 4,        // score 3/5
-      commentRatio: 0.03,     // score 2/5
-      testCodeRatio: 10,      // 0.10, score 5/15
+      godFileCount: 4,        // score 4/5
+      commentRatio: 0.015,    // score 2/5
+      testCodeRatio: 5,       // 0.05, score 5/15
       coverageConfigFound: false, // score 0/5
       testFrameworkCount: 1,  // score 4/5
-      avgComplexity: 15,      // score 3/10
-      maxComplexity: 30,      // score 2/10
+      avgComplexity: 15,      // score 4/15
+      maxComplexity: 45,      // score 3/5
       healthChecks: [
         { id: 'readme', name: 'README', present: true },
         { id: 'license', name: 'LICENSE', present: false },
@@ -501,25 +501,25 @@ describe('computeScoring — grade boundaries', () => {
         { id: 'editorconfig', name: '.editorconfig', present: false },
         { id: 'contributing', name: 'CONTRIBUTING', present: false },
       ],
-      treeDepth: 10,          // score 4/10
+      treeDepth: 10,          // score 7/10
       filesPerFolder: 30,     // score 8/15
     });
     const result = computeScoring(report, rubric);
-    expect(result.normalizedScore).toBeGreaterThanOrEqual(40);
-    expect(result.normalizedScore).toBeLessThan(60);
+    expect(result.normalizedScore).toBeGreaterThanOrEqual(35);
+    expect(result.normalizedScore).toBeLessThan(55);
     expect(result.grade).toBe('D');
   });
 
-  it('assigns grade C for scores in [60, 75)', () => {
+  it('assigns grade C for scores in [55, 70)', () => {
     const rubric = loadRubric(RUBRIC_PATH);
     const report = makeFullReport({
       godFileCount: 2,        // score 4/5
-      commentRatio: 0.06,     // score 3/5
+      commentRatio: 0.03,     // score 3/5
       testCodeRatio: 20,      // 0.20, score 9/15
       coverageConfigFound: false, // score 0/5
       testFrameworkCount: 1,  // score 4/5
-      avgComplexity: 7,       // score 6/10
-      maxComplexity: 18,      // score 5/10
+      avgComplexity: 10,      // score 8/15
+      maxComplexity: 25,      // score 4/5
       healthChecks: [
         { id: 'readme', name: 'README', present: true },
         { id: 'license', name: 'LICENSE', present: true },
@@ -528,12 +528,12 @@ describe('computeScoring — grade boundaries', () => {
         { id: 'editorconfig', name: '.editorconfig', present: false },
         { id: 'contributing', name: 'CONTRIBUTING', present: false },
       ],
-      treeDepth: 6,           // score 7/10
+      treeDepth: 6,           // score 10/10
       filesPerFolder: 15,     // score 12/15
     });
     const result = computeScoring(report, rubric);
-    expect(result.normalizedScore).toBeGreaterThanOrEqual(60);
-    expect(result.normalizedScore).toBeLessThan(75);
+    expect(result.normalizedScore).toBeGreaterThanOrEqual(55);
+    expect(result.normalizedScore).toBeLessThan(70);
     expect(result.grade).toBe('C');
   });
 });
@@ -555,13 +555,13 @@ describe('computeScoring — repoHealth metric extraction', () => {
 
     const health = result.categories['repoHealth']!;
     expect(health.metrics['readme']!.value).toBe(true);
-    expect(health.metrics['readme']!.score).toBe(5);
+    expect(health.metrics['readme']!.score).toBe(6);
     expect(health.metrics['license']!.value).toBe(false);
     expect(health.metrics['license']!.score).toBe(0);
     expect(health.metrics['ci']!.value).toBe(true);
-    expect(health.metrics['ci']!.score).toBe(5);
+    expect(health.metrics['ci']!.score).toBe(6);
     expect(health.metrics['gitignore']!.value).toBe(true);
-    expect(health.metrics['gitignore']!.score).toBe(3);
+    expect(health.metrics['gitignore']!.score).toBe(4);
     expect(health.metrics['editorconfig']!.value).toBe(false);
     expect(health.metrics['editorconfig']!.score).toBe(0);
     expect(health.metrics['contributing']!.value).toBe(false);

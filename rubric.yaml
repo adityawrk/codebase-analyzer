@@ -17,19 +17,19 @@ categories:
         description: "Penalizes files exceeding 500 LOC threshold"
         thresholds:
           - { max: 0, score: 5, label: "No god files" }
-          - { max: 3, score: 4, label: "Very few god files" }
-          - { max: 5, score: 3, label: "Few god files" }
-          - { max: 10, score: 2, label: "Several god files" }
-          - { min: 11, score: 1, label: "Many god files" }
+          - { max: 5, score: 4, label: "Very few god files" }
+          - { max: 15, score: 3, label: "Some god files" }
+          - { max: 30, score: 2, label: "Many god files" }
+          - { min: 31, score: 1, label: "Very many god files" }
       commentRatio:
         weight: 5
         description: "Rewards codebases with meaningful comment coverage"
         thresholds:
-          - { min: 0.15, score: 5, label: "Well-commented" }
-          - { min: 0.10, score: 4, label: "Good comments" }
-          - { min: 0.05, score: 3, label: "Some comments" }
-          - { min: 0.02, score: 2, label: "Sparse comments" }
-          - { max: 0.02, score: 1, label: "Very few comments" }
+          - { min: 0.10, score: 5, label: "Well-commented" }
+          - { min: 0.05, score: 4, label: "Good comments" }
+          - { min: 0.02, score: 3, label: "Some comments" }
+          - { min: 0.01, score: 2, label: "Sparse comments" }
+          - { max: 0.01, score: 1, label: "Very few comments" }
 
   testing:
     weight: 25
@@ -39,10 +39,10 @@ categories:
         description: "Test code as percentage of production code"
         thresholds:
           - { min: 0.50, score: 15, label: "Excellent test coverage" }
-          - { min: 0.30, score: 12, label: "Strong test coverage" }
-          - { min: 0.15, score: 9, label: "Moderate test coverage" }
-          - { min: 0.05, score: 5, label: "Minimal test coverage" }
-          - { max: 0.05, score: 0, label: "Insufficient test coverage" }
+          - { min: 0.25, score: 12, label: "Strong test coverage" }
+          - { min: 0.10, score: 9, label: "Moderate test coverage" }
+          - { min: 0.03, score: 5, label: "Minimal test coverage" }
+          - { max: 0.03, score: 0, label: "Insufficient test coverage" }
       coverageConfig:
         weight: 5
         description: "Whether test coverage reporting is configured"
@@ -61,62 +61,62 @@ categories:
     weight: 20
     metrics:
       avgComplexity:
-        weight: 10
+        weight: 15
         description: "Average McCabe complexity per function across the repo"
         thresholds:
-          - { max: 3, score: 10, label: "Very low complexity" }
-          - { max: 5, score: 8, label: "Low complexity" }
-          - { max: 10, score: 6, label: "Moderate complexity" }
-          - { max: 20, score: 3, label: "High complexity" }
+          - { max: 4, score: 15, label: "Very low complexity" }
+          - { max: 7, score: 12, label: "Low complexity" }
+          - { max: 12, score: 8, label: "Moderate complexity" }
+          - { max: 20, score: 4, label: "High complexity" }
           - { min: 20, score: 0, label: "Very high complexity" }
       maxComplexity:
-        weight: 10
+        weight: 5
         description: "Highest complexity of any single function"
         thresholds:
-          - { max: 10, score: 10, label: "Well-bounded" }
-          - { max: 15, score: 8, label: "Mostly bounded" }
-          - { max: 25, score: 5, label: "Some complex functions" }
-          - { max: 50, score: 2, label: "Very complex functions" }
-          - { min: 50, score: 0, label: "Extremely complex functions" }
+          - { max: 20, score: 5, label: "Well-bounded" }
+          - { max: 40, score: 4, label: "Mostly bounded" }
+          - { max: 80, score: 3, label: "Some complex functions" }
+          - { max: 150, score: 2, label: "Very complex functions" }
+          - { min: 150, score: 1, label: "Extremely complex functions" }
 
   repoHealth:
     weight: 20
     metrics:
       readme:
-        weight: 5
+        weight: 6
         description: "README file presence"
         thresholds:
-          - { value: true, score: 5 }
+          - { value: true, score: 6 }
           - { value: false, score: 0 }
       license:
-        weight: 3
+        weight: 2
         description: "LICENSE file presence"
         thresholds:
-          - { value: true, score: 3 }
+          - { value: true, score: 2 }
           - { value: false, score: 0 }
       ci:
-        weight: 5
+        weight: 6
         description: "CI/CD configuration presence"
         thresholds:
-          - { value: true, score: 5 }
+          - { value: true, score: 6 }
           - { value: false, score: 0 }
       gitignore:
-        weight: 3
+        weight: 4
         description: ".gitignore presence"
         thresholds:
-          - { value: true, score: 3 }
+          - { value: true, score: 4 }
           - { value: false, score: 0 }
       editorconfig:
-        weight: 2
+        weight: 1
         description: ".editorconfig presence"
         thresholds:
-          - { value: true, score: 2 }
+          - { value: true, score: 1 }
           - { value: false, score: 0 }
       contributing:
-        weight: 2
+        weight: 1
         description: "CONTRIBUTING file presence"
         thresholds:
-          - { value: true, score: 2 }
+          - { value: true, score: 1 }
           - { value: false, score: 0 }
 
   structure:
@@ -126,30 +126,30 @@ categories:
         weight: 10
         description: "Deepest directory nesting level"
         thresholds:
-          - { max: 5, score: 10, label: "Flat structure" }
-          - { max: 8, score: 7, label: "Moderate nesting" }
-          - { max: 12, score: 4, label: "Deep nesting" }
-          - { min: 12, score: 1, label: "Very deep nesting" }
+          - { max: 6, score: 10, label: "Flat structure" }
+          - { max: 10, score: 7, label: "Moderate nesting" }
+          - { max: 15, score: 4, label: "Deep nesting" }
+          - { min: 15, score: 1, label: "Very deep nesting" }
       avgFilesPerFolder:
         weight: 15
         description: "Average number of files per directory"
         thresholds:
-          - { max: 10, score: 15, label: "Well-organized" }
-          - { max: 20, score: 12, label: "Good organization" }
-          - { max: 35, score: 8, label: "Some large folders" }
-          - { max: 50, score: 4, label: "Crowded folders" }
-          - { min: 50, score: 1, label: "Overcrowded folders" }
+          - { max: 12, score: 15, label: "Well-organized" }
+          - { max: 25, score: 12, label: "Good organization" }
+          - { max: 40, score: 8, label: "Some large folders" }
+          - { max: 60, score: 4, label: "Crowded folders" }
+          - { min: 60, score: 1, label: "Overcrowded folders" }
 
 # Grade boundaries (applied to normalizedScore):
-#   A:  90-100
-#   B:  75-89
-#   C:  60-74
-#   D:  40-59
-#   F:   0-39
+#   A:  85-100
+#   B:  70-84
+#   C:  55-69
+#   D:  35-54
+#   F:   0-34
 #   INCOMPLETE: analysisCompleteness < 60%
 gradeBoundaries:
-  A: 90
-  B: 75
-  C: 60
-  D: 40
+  A: 85
+  B: 70
+  C: 55
+  D: 35
   F: 0

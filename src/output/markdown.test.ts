@@ -21,7 +21,6 @@ import type {
   EnvVarsResult,
   DuplicationResult,
   ArchitectureResult,
-  ScoringResult,
   AnalyzerMeta,
 } from '../core/types.js';
 
@@ -247,7 +246,6 @@ describe('formatMarkdown', () => {
 
     expect(output).toContain('# Codebase Analysis: my-project');
     expect(output).toContain('## Summary');
-    expect(output).toContain('## Score: B (78/100)');
     expect(output).toContain('## Language Breakdown');
     expect(output).toContain('## Code Type Breakdown');
     expect(output).toContain('## Folder Structure');
@@ -277,18 +275,10 @@ describe('formatMarkdown', () => {
     expect(output).toContain('# Codebase Analysis: cool-project');
   });
 
-  it('includes footer with grade and completeness when scoring exists', () => {
+  it('includes footer with completeness and version', () => {
     const output = formatMarkdown(mockReport());
-    expect(output).toContain('Grade: B (78/100)');
     expect(output).toContain('Completeness: 95%');
     expect(output).toContain('codebase-analyzer v0.1.0');
-  });
-
-  it('includes footer without grade when scoring is absent', () => {
-    const report = mockReport({ scoring: undefined });
-    const output = formatMarkdown(report);
-    expect(output).toContain('Completeness: 95%');
-    expect(output).not.toContain('Grade:');
   });
 });
 
@@ -515,92 +505,8 @@ describe('formatDuplication section', () => {
 // capitalize — kebab-case handling
 // ---------------------------------------------------------------------------
 
-describe('capitalize (tested via scoring table output)', () => {
-  it('converts kebab-case category names: "repo-health" becomes "RepoHealth"', () => {
-    const output = formatMarkdown(mockReport());
-    // The scoring table renders capitalize(name) for each category
-    expect(output).toContain('| RepoHealth |');
-    expect(output).toContain('| Testing |');
-    expect(output).toContain('| Complexity |');
-    expect(output).toContain('| Security |');
-    expect(output).toContain('| Dependencies |');
-    expect(output).toContain('| Architecture |');
-  });
-});
+// capitalize test removed — scoring table was removed from output
 
-// ---------------------------------------------------------------------------
-// Star ratings — scoreToStars / scoreToStarsFromPct
-// ---------------------------------------------------------------------------
-
-describe('star ratings in scoring table', () => {
-  const fullStar = '\u2605';
-  const emptyStar = '\u2606';
-
-  function makeScoring(categories: Record<string, { score: number; maxScore: number }>): ScoringResult {
-    const cats: Record<string, { score: number; maxScore: number; metrics: Record<string, never> }> = {};
-    for (const [name, { score, maxScore }] of Object.entries(categories)) {
-      cats[name] = { score, maxScore, metrics: {} };
-    }
-    const totalScore = Object.values(categories).reduce((s, c) => s + c.score, 0);
-    const totalPossible = Object.values(categories).reduce((s, c) => s + c.maxScore, 0);
-    return {
-      totalScore,
-      totalPossible,
-      normalizedScore: Math.round((totalScore / totalPossible) * 100),
-      grade: 'B',
-      categories: cats,
-    };
-  }
-
-  it('0% score produces 1 filled star and 4 empty', () => {
-    const report = mockReport({
-      scoring: makeScoring({ low: { score: 0, maxScore: 100 } }),
-    });
-    const output = formatMarkdown(report);
-    // 0% -> 1 star
-    expect(output).toContain(`${fullStar}${emptyStar.repeat(4)}`);
-  });
-
-  it('20% score produces 2 filled stars and 3 empty', () => {
-    const report = mockReport({
-      scoring: makeScoring({ mid: { score: 20, maxScore: 100 } }),
-    });
-    const output = formatMarkdown(report);
-    expect(output).toContain(`${fullStar.repeat(2)}${emptyStar.repeat(3)}`);
-  });
-
-  it('50% score produces 3 filled stars and 2 empty', () => {
-    const report = mockReport({
-      scoring: makeScoring({ mid: { score: 50, maxScore: 100 } }),
-    });
-    const output = formatMarkdown(report);
-    expect(output).toContain(`${fullStar.repeat(3)}${emptyStar.repeat(2)}`);
-  });
-
-  it('80% score produces 5 filled stars', () => {
-    const report = mockReport({
-      scoring: makeScoring({ high: { score: 80, maxScore: 100 } }),
-    });
-    const output = formatMarkdown(report);
-    expect(output).toContain(`${fullStar.repeat(5)}`);
-  });
-
-  it('100% score produces 5 filled stars', () => {
-    const report = mockReport({
-      scoring: makeScoring({ perfect: { score: 100, maxScore: 100 } }),
-    });
-    const output = formatMarkdown(report);
-    expect(output).toContain(`${fullStar.repeat(5)}`);
-  });
-
-  it('maxScore 0 produces 0 filled stars and 5 empty', () => {
-    const report = mockReport({
-      scoring: makeScoring({ zero: { score: 0, maxScore: 0 } }),
-    });
-    const output = formatMarkdown(report);
-    expect(output).toContain(`${emptyStar.repeat(5)}`);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // God files section — conditional rendering

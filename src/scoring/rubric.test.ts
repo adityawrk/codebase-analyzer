@@ -46,10 +46,10 @@ describe('loadRubric', () => {
   it('has valid grade boundaries', () => {
     const rubric = loadRubric(RUBRIC_PATH);
 
-    expect(rubric.gradeBoundaries.A).toBe(90);
-    expect(rubric.gradeBoundaries.B).toBe(75);
-    expect(rubric.gradeBoundaries.C).toBe(60);
-    expect(rubric.gradeBoundaries.D).toBe(40);
+    expect(rubric.gradeBoundaries.A).toBe(85);
+    expect(rubric.gradeBoundaries.B).toBe(70);
+    expect(rubric.gradeBoundaries.C).toBe(55);
+    expect(rubric.gradeBoundaries.D).toBe(35);
     expect(rubric.gradeBoundaries.F).toBe(0);
   });
 

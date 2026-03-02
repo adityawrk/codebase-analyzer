@@ -151,17 +151,81 @@ function calculateConventionalPercent(subjects: string[]): number {
 }
 
 /**
+ * Merge contributors that likely represent the same person.
+ *
+ * Heuristic: cluster by normalized name. "Aditya Patni" with email A and
+ * "Aditya Patni" with email B are merged. Name comparison is case-insensitive
+ * and trims whitespace. The entry with the most commits keeps its name/email.
+ */
+/** Extract GitHub user ID from noreply emails: {id}+{username}@users.noreply.github.com */
+const GITHUB_NOREPLY_RE = /^(\d+)\+.+@users\.noreply\.github\.com$/;
+
+function deduplicateContributors(contributors: ContributorInfo[]): ContributorInfo[] {
+  // Sort by commits descending so the primary identity is inserted first.
+  const sorted = [...contributors].sort((a, b) => b.commits - a.commits);
+  const entries: ContributorInfo[] = [];
+  const keys: string[] = []; // parallel array of normalized names
+  const ghIds: (string | null)[] = []; // parallel array of GitHub user IDs
+
+  for (const c of sorted) {
+    const norm = c.name.toLowerCase().trim();
+    const ghId = GITHUB_NOREPLY_RE.exec(c.email)?.[1] ?? null;
+
+    // Find existing entry that matches by name or GitHub user ID
+    let matchIdx = -1;
+    for (let i = 0; i < entries.length; i++) {
+      if (namesMatch(norm, keys[i]!)) {
+        matchIdx = i;
+        break;
+      }
+      // Match by GitHub noreply user ID (same person, different usernames)
+      if (ghId && ghIds[i] && ghId === ghIds[i]) {
+        matchIdx = i;
+        break;
+      }
+    }
+
+    if (matchIdx >= 0) {
+      entries[matchIdx]!.commits += c.commits;
+      // Carry over GitHub ID if the merged entry doesn't have one yet
+      if (ghId && !ghIds[matchIdx]) {
+        ghIds[matchIdx] = ghId;
+      }
+    } else {
+      entries.push({ ...c });
+      keys.push(norm);
+      ghIds.push(ghId);
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Check if two normalized names refer to the same person.
+ * Matches exact name, or if one is a prefix of the other followed by a space
+ * (e.g. "aditya" matches "aditya patni"). Minimum 3 chars to avoid short-name collisions.
+ */
+function namesMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  return shorter.length >= 3 && longer.startsWith(shorter + ' ');
+}
+
+/**
  * Calculate bus factor: number of contributors who authored >= 5% of commits
  * in the last 12 months. Minimum 1 if there are any contributors.
+ * Contributors are deduplicated by name before counting.
  */
 function calculateBusFactor(contributors: ContributorInfo[]): number {
   if (contributors.length === 0) return 0;
 
-  const totalCommits = contributors.reduce((sum, c) => sum + c.commits, 0);
+  const merged = deduplicateContributors(contributors);
+  const totalCommits = merged.reduce((sum, c) => sum + c.commits, 0);
   if (totalCommits === 0) return 0;
 
   const threshold = totalCommits * 0.05;
-  const significantContributors = contributors.filter(
+  const significantContributors = merged.filter(
     (c) => c.commits >= threshold,
   ).length;
 
@@ -380,8 +444,9 @@ export async function analyzeGit(
   // Parse totalCommits
   const totalCommits = parseInt(commitCountResult.stdout.trim(), 10) || 0;
 
-  // Parse all contributors
-  const allContributors = parseShortlog(shortlogResult.stdout);
+  // Parse all contributors and deduplicate by name
+  const rawContributors = parseShortlog(shortlogResult.stdout);
+  const allContributors = deduplicateContributors(rawContributors);
 
   // Top contributors: sorted descending by commits, limited to TOP_CONTRIBUTORS_LIMIT
   const topContributors = allContributors

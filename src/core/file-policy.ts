@@ -25,7 +25,16 @@ const DEFAULT_EXCLUDE_DIRS = new Set([
   '__pycache__',
   '.next',
   '.nuxt',
+  'coverage',
+  '.gradle',
+  'out',
+  'target',
+  'bin',
+  'obj',
 ]);
+
+/** Directory prefixes always excluded (e.g. dist-*, build-*). */
+const DEFAULT_EXCLUDE_DIR_PREFIXES = ['dist-', 'build-'];
 
 /** File-name patterns always excluded (exact match on basename). */
 const DEFAULT_EXCLUDE_FILES = new Set([
@@ -301,6 +310,12 @@ function matchesDefaultExclude(relativePath: string): string | null {
   for (const part of parts) {
     if (DEFAULT_EXCLUDE_DIRS.has(part)) {
       return `default-exclude-dir:${part}`;
+    }
+    // Prefix-based excludes (dist-*, build-*, etc.)
+    for (const prefix of DEFAULT_EXCLUDE_DIR_PREFIXES) {
+      if (part.startsWith(prefix)) {
+        return `default-exclude-dir:${part}`;
+      }
     }
   }
 

@@ -269,6 +269,52 @@ function detectFromPython(
 }
 
 // ---------------------------------------------------------------------------
+// Gradle / JVM detection (build.gradle / build.gradle.kts)
+// ---------------------------------------------------------------------------
+
+/** Well-known Gradle dependencies and plugins mapped to tech stack entries. */
+const GRADLE_PATTERNS: Array<{ pattern: RegExp; entry: { name: string; category: TechStackEntry['category'] } }> = [
+  { pattern: /junit/i, entry: { name: 'JUnit', category: 'test-runner' } },
+  { pattern: /mockk/i, entry: { name: 'MockK', category: 'test-runner' } },
+  { pattern: /robolectric/i, entry: { name: 'Robolectric', category: 'test-runner' } },
+  { pattern: /jacoco/i, entry: { name: 'JaCoCo', category: 'test-runner' } },
+  { pattern: /ktlint|kotlinter/i, entry: { name: 'ktlint', category: 'linter' } },
+  { pattern: /detekt/i, entry: { name: 'Detekt', category: 'linter' } },
+  { pattern: /hilt|dagger/i, entry: { name: 'Hilt/Dagger', category: 'framework' } },
+  { pattern: /retrofit/i, entry: { name: 'Retrofit', category: 'framework' } },
+  { pattern: /room/i, entry: { name: 'Room', category: 'database' } },
+  { pattern: /ktor/i, entry: { name: 'Ktor', category: 'framework' } },
+  { pattern: /spring/i, entry: { name: 'Spring', category: 'framework' } },
+  { pattern: /compose/i, entry: { name: 'Jetpack Compose', category: 'framework' } },
+];
+
+function detectFromGradle(
+  root: string,
+  manifestPath: string,
+): TechStackEntry[] {
+  const absPath = path.join(root, manifestPath);
+  const content = readManifestSync(absPath);
+  if (!content) return [];
+
+  const entries: TechStackEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const { pattern, entry } of GRADLE_PATTERNS) {
+    if (seen.has(entry.name)) continue;
+    if (pattern.test(content)) {
+      seen.add(entry.name);
+      entries.push({
+        name: entry.name,
+        category: entry.category,
+        source: manifestPath,
+      });
+    }
+  }
+
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
 // File presence detection
 // ---------------------------------------------------------------------------
 
@@ -282,6 +328,7 @@ interface FilePresenceRule {
 }
 
 const FILE_PRESENCE_RULES: FilePresenceRule[] = [
+  // --- CI/CD ---
   {
     test: (p) => {
       const normalized = p.replace(/\\/g, '/').toLowerCase();
@@ -376,6 +423,31 @@ const FILE_PRESENCE_RULES: FilePresenceRule[] = [
     },
     entry: { name: 'Netlify', category: 'deployment' },
     source: 'netlify.toml',
+  },
+  // --- JVM / Android ---
+  {
+    test: (p) => {
+      const bn = path.basename(p).toLowerCase();
+      return bn === 'build.gradle' || bn === 'build.gradle.kts';
+    },
+    entry: { name: 'Gradle', category: 'build-tool' },
+    source: 'build.gradle',
+  },
+  {
+    test: (p) => {
+      const normalized = p.replace(/\\/g, '/').toLowerCase();
+      return normalized.includes('androidmanifest.xml');
+    },
+    entry: { name: 'Android SDK', category: 'framework' },
+    source: 'AndroidManifest.xml',
+  },
+  {
+    test: (p) => {
+      const bn = path.basename(p).toLowerCase();
+      return bn === 'pom.xml';
+    },
+    entry: { name: 'Maven', category: 'build-tool' },
+    source: 'pom.xml',
   },
 ];
 
@@ -515,7 +587,10 @@ export function analyzeTechStack(
         case 'python-requirements':
           allEntries.push(...detectFromPython(index.root, manifest.path));
           break;
-        // maven and gradle are recognized manifest types but not yet implemented
+        case 'gradle':
+          allEntries.push(...detectFromGradle(index.root, manifest.path));
+          break;
+        // maven not yet implemented
         default:
           break;
       }

@@ -634,7 +634,7 @@ describe('analyzeDuplication — exec invocation', () => {
         '--output', expect.stringContaining('jscpd-report-'),
         '--min-lines', '5',
         '--min-tokens', '50',
-        '--ignore', 'node_modules,**/.git,vendor,dist,build,.next',
+        '--ignore', '**/node_modules,**/.git,**/vendor,**/dist,**/build,**/.next,**/.gradle,**/out,**/target,**/bin,**/obj,**/coverage,**/*.min.js,**/*.min.css,**/*.bundle.js',
         '/my/project',
       ],
       expect.objectContaining({

@@ -264,7 +264,7 @@ export async function analyzeDuplication(
         '--output', tempDir,
         '--min-lines', '5',
         '--min-tokens', '50',
-        '--ignore', 'node_modules,**/.git,vendor,dist,build,.next',
+        '--ignore', '**/node_modules,**/.git,**/vendor,**/dist,**/build,**/.next,**/.gradle,**/out,**/target,**/bin,**/obj,**/coverage,**/*.min.js,**/*.min.css,**/*.bundle.js',
         index.root,
       ],
       { timeout: index.config.timeout, cwd: index.root },
