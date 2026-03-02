@@ -18,6 +18,8 @@ import { analyzeTechStack } from '../analyzers/tech-stack.js';
 import { analyzeEnvVars } from '../analyzers/env-vars.js';
 import { analyzeDuplication } from '../analyzers/duplication.js';
 import { analyzeArchitecture } from '../analyzers/architecture.js';
+import { loadRubric } from '../scoring/rubric.js';
+import { computeScoring } from '../scoring/aggregator.js';
 import type {
   AnalysisConfig,
   AnalyzerMeta,
@@ -264,7 +266,8 @@ export async function analyzeRepository(
 
   const overallDurationMs = Math.round(performance.now() - overallStart);
 
-  return {
+  // Build report object
+  const report: ReportData = {
     meta: {
       generatedAt: new Date().toISOString(),
       analyzerVersion: VERSION,
@@ -284,4 +287,14 @@ export async function analyzeRepository(
     duplication,
     architecture,
   };
+
+  // Phase 3: Compute scoring
+  const rubric = loadRubric();
+  const scoring = computeScoring(report, rubric);
+  report.scoring = scoring;
+  report.meta.grade = scoring.grade;
+  report.meta.score = scoring.normalizedScore;
+  report.meta.durationMs = overallDurationMs;
+
+  return report;
 }

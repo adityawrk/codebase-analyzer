@@ -90,25 +90,39 @@
           "description": "Per-language breakdown, ordered by codeLines descending",
           "items": {
             "type": "object",
-            "required": ["language", "fileCount", "codeLines", "percentage"],
+            "required": ["language"],
             "properties": {
               "language": {
                 "type": "string",
                 "description": "Canonical language name (e.g., \"TypeScript\")"
               },
-              "fileCount": {
+              "extension": {
+                "type": "string",
+                "description": "Primary file extension (e.g., \".ts\")"
+              },
+              "files": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Number of files of this language"
+              },
+              "lines": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Total lines in files of this language"
               },
               "codeLines": {
                 "type": "integer",
                 "minimum": 0
               },
-              "totalLines": {
+              "blankLines": {
                 "type": "integer",
                 "minimum": 0
               },
-              "percentage": {
+              "commentLines": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "percentOfCode": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 100,
@@ -122,15 +136,16 @@
           "description": "Files exceeding 500 LOC threshold",
           "items": {
             "type": "object",
-            "required": ["path", "codeLines", "language"],
+            "required": ["path", "lines", "language"],
             "properties": {
               "path": {
                 "type": "string",
                 "description": "Relative path from repo root"
               },
-              "codeLines": {
+              "lines": {
                 "type": "integer",
-                "minimum": 501
+                "minimum": 1,
+                "description": "Total lines in the file"
               },
               "language": {
                 "type": "string"
@@ -193,19 +208,7 @@
             "properties": {
               "name": {
                 "type": "string",
-                "enum": [
-                  "readme",
-                  "license",
-                  "ci",
-                  "contributing",
-                  "gitignore",
-                  "editorconfig",
-                  "dockerfile",
-                  "securityPolicy",
-                  "codeOfConduct",
-                  "changelog"
-                ],
-                "description": "Check identifier"
+                "description": "Check identifier (human-readable name)"
               },
               "present": {
                 "type": "boolean",
@@ -256,9 +259,9 @@
           "description": "Per-file complexity summaries",
           "items": {
             "type": "object",
-            "required": ["path", "avgComplexity", "maxComplexity", "functionCount"],
+            "required": ["file", "avgComplexity", "maxComplexity", "functionCount"],
             "properties": {
-              "path": {
+              "file": {
                 "type": "string",
                 "description": "Relative path from repo root"
               },
@@ -332,8 +335,22 @@
         },
         "testFileList": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "Relative paths of all detected test files"
+          "items": {
+            "type": "object",
+            "required": ["path", "lines"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Relative path of test file"
+              },
+              "lines": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of lines in the test file"
+              }
+            }
+          },
+          "description": "Detected test files with line counts"
         },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
@@ -404,9 +421,12 @@
               "ruleId": {
                 "type": "string",
                 "description": "Gitleaks rule identifier"
+              },
+              "description": {
+                "type": "string",
+                "description": "Human-readable description of the finding"
               }
-            },
-            "additionalProperties": false
+            }
           },
           "description": "Secret findings. NEVER contains raw secret values."
         },
@@ -428,12 +448,10 @@
           "minimum": 0
         },
         "firstCommitDate": {
-          "type": ["string", "null"],
-          "format": "date-time"
+          "type": ["string", "null"]
         },
         "lastCommitDate": {
-          "type": ["string", "null"],
-          "format": "date-time"
+          "type": ["string", "null"]
         },
         "activeDays": {
           "type": "integer",
@@ -446,9 +464,27 @@
             "required": ["name", "email", "commits"],
             "properties": {
               "name": { "type": "string" },
-              "email": { "type": "string", "format": "email" },
+              "email": { "type": "string" },
               "commits": { "type": "integer", "minimum": 1 }
             }
+          }
+        },
+        "conventionalCommitPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of commits following conventional commit format"
+        },
+        "busFactor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum number of contributors covering 50% of commits"
+        },
+        "commitFrequency": {
+          "type": "object",
+          "properties": {
+            "commitsPerWeek": { "type": "number", "minimum": 0 },
+            "commitsPerMonth": { "type": "number", "minimum": 0 }
           }
         },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
@@ -478,6 +514,23 @@
         },
         "packageManager": {
           "type": ["string", "null"]
+        },
+        "dependencies": {
+          "type": "array",
+          "description": "List of all detected dependencies",
+          "items": {
+            "type": "object",
+            "required": ["name", "version", "type", "ecosystem"],
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["direct", "dev", "peer", "optional"]
+              },
+              "ecosystem": { "type": "string" }
+            }
+          }
         },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
@@ -617,6 +670,11 @@
           "maximum": 100,
           "description": "totalScore / totalPossible * 100, normalized for partial data"
         },
+        "grade": {
+          "type": "string",
+          "enum": ["A", "B", "C", "D", "F", "INCOMPLETE"],
+          "description": "Overall letter grade"
+        },
         "categories": {
           "type": "object",
           "additionalProperties": {
@@ -669,13 +727,13 @@
     "functionComplexity": {
       "type": "object",
       "description": "Complexity data for a single function",
-      "required": ["name", "filePath", "line", "complexity"],
+      "required": ["name", "file", "line", "complexity"],
       "properties": {
         "name": {
           "type": "string",
           "description": "Function name, <anonymous>, or <arrow>"
         },
-        "filePath": {
+        "file": {
           "type": "string",
           "description": "Relative path from repo root"
         },
@@ -695,25 +753,21 @@
     "folderNode": {
       "type": "object",
       "description": "Recursive directory tree node",
-      "required": ["name", "type"],
+      "required": ["name"],
       "properties": {
         "name": {
           "type": "string",
           "description": "Directory or file name"
         },
-        "type": {
-          "type": "string",
-          "enum": ["directory", "file"]
-        },
         "fileCount": {
           "type": "integer",
           "minimum": 0,
-          "description": "Number of direct child files (directories only)"
+          "description": "Number of direct child files"
         },
         "children": {
           "type": "array",
           "items": { "$ref": "#/definitions/folderNode" },
-          "description": "Child nodes (directories only)"
+          "description": "Child nodes"
         }
       }
     }

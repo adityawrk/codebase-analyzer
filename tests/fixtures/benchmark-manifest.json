@@ -1,4 +1,41 @@
 {
   "version": 1,
-  "repos": []
+  "description": "Benchmark repos pinned at immutable SHAs for golden output testing",
+  "fixtures": [
+    {
+      "name": "express",
+      "repo": "https://github.com/expressjs/express",
+      "sha": "6c4249feec8ab40631817c8e7001baf2ed022224",
+      "language": "javascript",
+      "description": "Node.js web framework"
+    },
+    {
+      "name": "flask",
+      "repo": "https://github.com/pallets/flask",
+      "sha": "c34d6e81fd8e405e6d4178bf24b364918811ef17",
+      "language": "python",
+      "description": "Python web framework"
+    },
+    {
+      "name": "ripgrep",
+      "repo": "https://github.com/BurntSushi/ripgrep",
+      "sha": "4519153e5e461527f4bca45b042fff45c4ec6fb9",
+      "language": "rust",
+      "description": "Rust CLI tool"
+    },
+    {
+      "name": "gin",
+      "repo": "https://github.com/gin-gonic/gin",
+      "sha": "cb2b764cc8a8613b84c44c45b8b2b1ba9da6244d",
+      "language": "go",
+      "description": "Go web framework"
+    },
+    {
+      "name": "typescript",
+      "repo": "https://github.com/microsoft/TypeScript",
+      "sha": "29b300deb56c775f19c2f0528012896e4d1db3e0",
+      "language": "typescript",
+      "description": "TypeScript compiler (large TypeScript repo)"
+    }
+  ]
 }
