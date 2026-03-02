@@ -368,7 +368,7 @@
               "secondStartLine": { "type": "integer" },
               "secondEndLine": { "type": "integer" },
               "lines": { "type": "integer", "minimum": 1 },
-              "tokens": { "type": "integer", "minimum": 1 }
+              "tokens": { "type": "integer", "minimum": 0 }
             }
           }
         },

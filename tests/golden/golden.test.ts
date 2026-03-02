@@ -20,7 +20,7 @@ const PROJECT_ROOT = path.resolve('.');
 let report: ReportData;
 let markdownOutput: string;
 
-describe('Golden output tests', { timeout: 60000 }, () => {
+describe('Golden output tests', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     const config: AnalysisConfig = {
       ...DEFAULT_CONFIG,

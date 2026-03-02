@@ -129,8 +129,12 @@ function parseJscpdReport(
   }
 
   const stats = report.statistics;
-  const duplicateLines = safeNumber(stats?.duplicatedLines, 0);
-  const duplicatePercentage = safeNumber(stats?.percentage, 0);
+  // jscpd v4: stats are nested under statistics.total
+  // jscpd v3: stats are directly on statistics
+  // Cast to Record — jscpd output shape varies across versions
+  const totals = (stats?.total ?? stats) as Record<string, unknown> | undefined;
+  const duplicateLines = safeNumber(totals?.duplicatedLines, 0);
+  const duplicatePercentage = safeNumber(totals?.percentage, 0);
 
   // Guard: duplicates must be an array (or absent → empty)
   const rawDuplicates = Array.isArray(report.duplicates) ? report.duplicates : [];
@@ -149,10 +153,10 @@ function parseJscpdReport(
       continue;
     }
 
-    // Skip clones with invalid lines/tokens (schema requires >= 1)
+    // Skip clones with no lines (tokens can be 0 in jscpd v4 for some formats)
     const lines = safeNumber(dup.lines, 0);
     const tokens = safeNumber(dup.tokens, 0);
-    if (lines < 1 || tokens < 1) continue;
+    if (lines < 1) continue;
 
     const firstFilePath = makeRelative(dup.firstFile.name, repoRoot);
     const secondFilePath = makeRelative(dup.secondFile.name, repoRoot);
@@ -239,26 +243,10 @@ export async function analyzeDuplication(
   }
 
   try {
-    // Write the indexed non-binary file list to a temp config file.
-    // jscpd does not support a --files-list option, but its config file
-    // accepts a `path` array. By pointing each entry at the individual files
-    // from index.files, we honour file-policy without importing it directly.
-    // We write a .jscpd.json config with the file list to the temp dir.
-    const nonBinaryFiles = index.files.filter((f) => !f.isBinary);
-    const configPath = path.join(tempDir, '.jscpd.json');
-    await fs.writeFile(
-      configPath,
-      JSON.stringify({
-        path: nonBinaryFiles.map((f) => path.join(index.root, f.path)),
-      }),
-      'utf-8',
-    );
-
-    // Run jscpd
-    // NOTE: --format is intentionally omitted. It controls which *language
-    // formats* jscpd analyzes (e.g. "php,javascript"). Passing --format json
-    // would restrict analysis to JSON files only. --reporters json controls
-    // the *output* reporter format.
+    // Run jscpd on the repo root directory.
+    // jscpd's `path` config expects directories, not individual files.
+    // We pass the repo root and let jscpd handle its own file discovery.
+    // Its built-in ignores (node_modules, .git, etc.) align well with ours.
     const result = await execTool(
       'jscpd',
       [
@@ -266,7 +254,7 @@ export async function analyzeDuplication(
         '--output', tempDir,
         '--min-lines', '5',
         '--min-tokens', '50',
-        '--config', configPath,
+        index.root,
       ],
       { timeout: index.config.timeout, cwd: index.root },
     );
