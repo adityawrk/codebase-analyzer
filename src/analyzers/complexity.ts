@@ -385,6 +385,12 @@ export async function analyzeComplexity(
       continue;
     }
 
+    // Skip minified/bundled files — avg line length > 500 chars is not human-written
+    if (content.length > 0) {
+      const lineCount = content.split('\n').length;
+      if (lineCount > 0 && content.length / lineCount > 500) continue;
+    }
+
     const fileResult = await computeFileComplexity(content, language, file.path);
 
     // Only include files that have at least one function

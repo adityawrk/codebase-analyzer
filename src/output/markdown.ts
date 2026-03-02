@@ -51,7 +51,7 @@ function formatHeader(report: ReportData): string[] {
   return [
     `# Codebase Analysis: ${repoName}`,
     `**Generated:** ${formatDate(report.meta.generatedAt)}`,
-    `**Directory:** \`${report.meta.directory}\``,
+    `**Directory:** \`${path.basename(report.meta.directory)}\``,
     '---',
   ];
 }
