@@ -5,12 +5,13 @@
   "description": "JSON output schema for the Codebase Analyzer CLI tool. Breaking changes require a version bump.",
   "type": "object",
   "required": ["meta", "sizing", "structure", "repoHealth", "complexity", "testAnalysis", "git", "dependencies", "security", "techStack", "envVars", "duplication", "architecture"],
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "meta": {
       "type": "object",
       "description": "Report metadata",
       "required": ["generatedAt", "analyzerVersion", "directory", "analysisCompleteness"],
+      "additionalProperties": false,
       "properties": {
         "generatedAt": {
           "type": "string",
@@ -53,6 +54,7 @@
       "type": "object",
       "description": "File and line count metrics",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "totalFiles": {
           "type": "integer",
@@ -79,18 +81,13 @@
           "minimum": 0,
           "description": "Blank lines"
         },
-        "commentRatio": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "commentLines / (codeLines + commentLines)"
-        },
         "languages": {
           "type": "array",
           "description": "Per-language breakdown, ordered by codeLines descending",
           "items": {
             "type": "object",
             "required": ["language"],
+            "additionalProperties": false,
             "properties": {
               "language": {
                 "type": "string",
@@ -137,6 +134,7 @@
           "items": {
             "type": "object",
             "required": ["path", "lines", "language"],
+            "additionalProperties": false,
             "properties": {
               "path": {
                 "type": "string",
@@ -161,6 +159,7 @@
       "type": "object",
       "description": "Directory structure metrics",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "treeString": {
           "type": "string",
@@ -170,26 +169,6 @@
           "$ref": "#/definitions/folderNode",
           "description": "Recursive folder/file tree as structured data"
         },
-        "maxDepth": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Deepest nesting level (root = 0)"
-        },
-        "topLevelFolders": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Names of directories at repo root"
-        },
-        "totalDirectories": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Total tracked directories"
-        },
-        "avgFilesPerFolder": {
-          "type": "number",
-          "minimum": 0,
-          "description": "totalTrackedFiles / totalTrackedDirectories"
-        },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
     },
@@ -198,6 +177,7 @@
       "type": "object",
       "description": "Repository health checks",
       "required": ["checks", "meta"],
+      "additionalProperties": false,
       "properties": {
         "checks": {
           "type": "array",
@@ -205,6 +185,7 @@
           "items": {
             "type": "object",
             "required": ["id", "name", "present"],
+            "additionalProperties": false,
             "properties": {
               "id": {
                 "type": "string",
@@ -229,11 +210,6 @@
             }
           }
         },
-        "score": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Sum of weights for passing checks"
-        },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
     },
@@ -242,6 +218,7 @@
       "type": "object",
       "description": "McCabe cyclomatic complexity metrics",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "repoAvgComplexity": {
           "type": ["number", "null"],
@@ -264,6 +241,7 @@
           "items": {
             "type": "object",
             "required": ["file", "avgComplexity", "maxComplexity", "functionCount"],
+            "additionalProperties": false,
             "properties": {
               "file": {
                 "type": "string",
@@ -302,6 +280,7 @@
       "type": "object",
       "description": "Test coverage and framework detection",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "testFiles": {
           "type": "integer",
@@ -313,11 +292,6 @@
           "minimum": 0,
           "description": "Total lines in test files"
         },
-        "testCodeLines": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Code lines in test files"
-        },
         "codeLines": {
           "type": "integer",
           "minimum": 0,
@@ -326,7 +300,7 @@
         "testCodeRatio": {
           "type": "number",
           "minimum": 0,
-          "description": "testCodeLines / (totalCodeLines - testCodeLines) * 100"
+          "description": "testLines / codeLines * 100"
         },
         "testFrameworks": {
           "type": "array",
@@ -342,6 +316,7 @@
           "items": {
             "type": "object",
             "required": ["path", "lines"],
+            "additionalProperties": false,
             "properties": {
               "path": {
                 "type": "string",
@@ -364,6 +339,7 @@
       "type": "object",
       "description": "Code duplication metrics from jscpd",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "duplicateLines": {
           "type": "integer",
@@ -383,6 +359,7 @@
           "items": {
             "type": "object",
             "required": ["firstFile", "secondFile", "lines"],
+            "additionalProperties": false,
             "properties": {
               "firstFile": { "type": "string" },
               "firstStartLine": { "type": "integer" },
@@ -403,6 +380,7 @@
       "type": "object",
       "description": "Secret detection metrics from gitleaks",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "secretsFound": {
           "type": "integer",
@@ -443,6 +421,7 @@
       "type": "object",
       "description": "Git history metrics",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "totalCommits": {
           "type": "integer",
@@ -467,6 +446,7 @@
           "items": {
             "type": "object",
             "required": ["name", "email", "commits"],
+            "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
               "email": { "type": "string" },
@@ -487,6 +467,7 @@
         },
         "commitFrequency": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "commitsPerWeek": { "type": "number", "minimum": 0 },
             "commitsPerMonth": { "type": "number", "minimum": 0 }
@@ -500,6 +481,7 @@
       "type": "object",
       "description": "Dependency analysis metrics",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "totalDependencies": {
           "type": "integer",
@@ -526,6 +508,7 @@
           "items": {
             "type": "object",
             "required": ["name", "version", "type", "ecosystem"],
+            "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
               "version": { "type": "string" },
@@ -545,12 +528,14 @@
       "type": "object",
       "description": "Detected technology stack",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "stack": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["name", "category", "source"],
+            "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
               "category": {
@@ -572,6 +557,7 @@
       "type": "object",
       "description": "Environment variable detection",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "totalVars": {
           "type": "integer",
@@ -582,6 +568,7 @@
           "items": {
             "type": "object",
             "required": ["name", "file", "line"],
+            "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
               "file": { "type": "string" },
@@ -603,6 +590,7 @@
       "type": "object",
       "description": "Import graph and module architecture metrics",
       "required": ["meta"],
+      "additionalProperties": false,
       "properties": {
         "totalImports": {
           "type": "integer",
@@ -617,6 +605,7 @@
           "items": {
             "type": "object",
             "required": ["from", "to"],
+            "additionalProperties": false,
             "properties": {
               "from": { "type": "string" },
               "to": { "type": "string" }
@@ -628,6 +617,7 @@
           "items": {
             "type": "object",
             "required": ["cycle"],
+            "additionalProperties": false,
             "properties": {
               "cycle": {
                 "type": "array",
@@ -642,6 +632,7 @@
           "items": {
             "type": "object",
             "required": ["module", "intraImports", "totalImports", "cohesionRatio"],
+            "additionalProperties": false,
             "properties": {
               "module": { "type": "string" },
               "intraImports": { "type": "integer", "minimum": 0 },
@@ -657,6 +648,7 @@
     "scoring": {
       "type": "object",
       "description": "Scoring breakdown by category",
+      "additionalProperties": false,
       "properties": {
         "totalScore": {
           "type": "number",
@@ -684,6 +676,7 @@
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "score": { "type": "number", "minimum": 0 },
               "maxScore": { "type": "number", "minimum": 0 },
@@ -691,6 +684,7 @@
                 "type": "object",
                 "additionalProperties": {
                   "type": "object",
+                  "additionalProperties": false,
                   "properties": {
                     "score": { "type": "number", "minimum": 0 },
                     "maxScore": { "type": "number", "minimum": 0 },
@@ -711,6 +705,7 @@
       "type": "object",
       "description": "Metadata for each analyzer section",
       "required": ["status"],
+      "additionalProperties": false,
       "properties": {
         "status": {
           "type": "string",
@@ -733,6 +728,7 @@
       "type": "object",
       "description": "Complexity data for a single function",
       "required": ["name", "file", "line", "complexity"],
+      "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",
@@ -759,6 +755,7 @@
       "type": "object",
       "description": "Recursive directory tree node",
       "required": ["name"],
+      "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",

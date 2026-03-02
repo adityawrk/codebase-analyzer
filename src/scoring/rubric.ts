@@ -67,8 +67,80 @@ const DEFAULT_RUBRIC_PATH = resolve(
   '../../rubric.yaml',
 );
 
+const DEFAULT_GRADE_BOUNDARIES: GradeBoundaries = { A: 90, B: 75, C: 60, D: 40, F: 0 };
+
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function emptyRubric(): Rubric {
+  return {
+    version: 1,
+    totalWeight: 100,
+    categories: {},
+    gradeBoundaries: { ...DEFAULT_GRADE_BOUNDARIES },
+  };
+}
+
+/**
+ * Validates that parsed categories have the expected structure:
+ * each category must have numeric weight and a metrics object where
+ * each metric has numeric weight and a thresholds array.
+ * Filters prototype-pollution keys.
+ */
+function validateCategories(
+  raw: unknown,
+): Record<string, CategoryDefinition> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+  const result: Record<string, CategoryDefinition> = {};
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (RESERVED_KEYS.has(key)) continue;
+    if (!val || typeof val !== 'object' || Array.isArray(val)) continue;
+
+    const cat = val as Record<string, unknown>;
+    const weight = typeof cat['weight'] === 'number' ? cat['weight'] : 0;
+    const rawMetrics = cat['metrics'];
+    if (!rawMetrics || typeof rawMetrics !== 'object' || Array.isArray(rawMetrics)) continue;
+
+    const metrics: Record<string, MetricDefinition> = {};
+    let valid = true;
+    for (const [mKey, mVal] of Object.entries(rawMetrics as Record<string, unknown>)) {
+      if (RESERVED_KEYS.has(mKey)) continue;
+      if (!mVal || typeof mVal !== 'object' || Array.isArray(mVal)) {
+        valid = false;
+        break;
+      }
+      const m = mVal as Record<string, unknown>;
+      if (typeof m['weight'] !== 'number') { valid = false; break; }
+      if (!Array.isArray(m['thresholds'])) { valid = false; break; }
+
+      metrics[mKey] = {
+        weight: m['weight'] as number,
+        description: typeof m['description'] === 'string' ? m['description'] as string : '',
+        thresholds: m['thresholds'] as Threshold[],
+      };
+    }
+    if (!valid) continue;
+
+    result[key] = { weight, metrics };
+  }
+  return result;
+}
+
+function validateGradeBoundaries(raw: unknown): GradeBoundaries {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_GRADE_BOUNDARIES };
+  const obj = raw as Record<string, unknown>;
+  return {
+    A: typeof obj['A'] === 'number' ? obj['A'] : 90,
+    B: typeof obj['B'] === 'number' ? obj['B'] : 75,
+    C: typeof obj['C'] === 'number' ? obj['C'] : 60,
+    D: typeof obj['D'] === 'number' ? obj['D'] : 40,
+    F: typeof obj['F'] === 'number' ? obj['F'] : 0,
+  };
+}
+
 /**
  * Loads and parses the rubric YAML file.
+ * Validates structure at load time — malformed categories are skipped.
  * Falls back to an empty default rubric if the file cannot be read or parsed.
  */
 export function loadRubric(rubricPath?: string): Rubric {
@@ -76,27 +148,43 @@ export function loadRubric(rubricPath?: string): Rubric {
 
   try {
     const raw = readFileSync(filePath, 'utf-8');
-    const parsed = yaml.parse(raw) as Record<string, unknown>;
+    const parsed = yaml.parse(raw);
+
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.warn(`[rubric] Invalid rubric format at ${filePath} — expected YAML mapping`);
+      return emptyRubric();
+    }
+
+    const categories = validateCategories(parsed['categories']);
+    const gradeBoundaries = validateGradeBoundaries(parsed['gradeBoundaries']);
+
+    // Warn on weight mismatches (non-fatal)
+    let computedTotal = 0;
+    for (const [catName, cat] of Object.entries(categories)) {
+      const metricSum = Object.values(cat.metrics).reduce((s, m) => s + m.weight, 0);
+      if (metricSum !== cat.weight) {
+        console.warn(`[rubric] Category "${catName}" weight (${cat.weight}) != metric sum (${metricSum})`);
+      }
+      computedTotal += cat.weight;
+    }
+
+    const totalWeight = typeof parsed['totalWeight'] === 'number' ? parsed['totalWeight'] : 100;
+    if (Object.keys(categories).length > 0 && computedTotal !== totalWeight) {
+      console.warn(`[rubric] totalWeight (${totalWeight}) != category sum (${computedTotal})`);
+    }
 
     return {
-      version: (parsed['version'] as number) ?? 1,
-      totalWeight: (parsed['totalWeight'] as number) ?? 100,
-      categories: (parsed['categories'] as Record<string, CategoryDefinition>) ?? {},
-      gradeBoundaries: (parsed['gradeBoundaries'] as GradeBoundaries) ?? {
-        A: 90,
-        B: 75,
-        C: 60,
-        D: 40,
-        F: 0,
-      },
+      version: typeof parsed['version'] === 'number' ? parsed['version'] : 1,
+      totalWeight,
+      categories,
+      gradeBoundaries,
     };
-  } catch {
-    return {
-      version: 1,
-      totalWeight: 100,
-      categories: {},
-      gradeBoundaries: { A: 90, B: 75, C: 60, D: 40, F: 0 },
-    };
+  } catch (err) {
+    console.warn(
+      `[rubric] Failed to load rubric from ${filePath}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return emptyRubric();
   }
 }
 
@@ -135,7 +223,7 @@ export function scoreMetric(
 
     if (isRangeThreshold(threshold)) {
       const numValue = typeof value === 'number' ? value : Number(value);
-      if (Number.isNaN(numValue)) continue;
+      if (!Number.isFinite(numValue)) continue;
 
       const hasMin = threshold.min !== undefined;
       const hasMax = threshold.max !== undefined;

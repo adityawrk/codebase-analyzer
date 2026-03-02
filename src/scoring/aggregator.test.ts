@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
 import { computeScoring, computeMaxDepth, computeAvgFilesPerFolder } from './aggregator.js';
 import { loadRubric } from './rubric.js';
-import type { ReportData, FolderNode, AnalyzerMeta } from '../core/types.js';
+import type { Rubric, CategoryDefinition } from './rubric.js';
+import type { ReportData, FolderNode, AnalyzerMeta, Grade } from '../core/types.js';
 
 const RUBRIC_PATH = resolve(import.meta.dirname, '../../rubric.yaml');
 
@@ -78,12 +79,12 @@ function makeFullReport(overrides?: Partial<{
     language: 'TypeScript',
   }));
 
-  return {
+  const report: ReportData = {
     meta: {
       generatedAt: new Date().toISOString(),
       analyzerVersion: '0.1.0',
       directory: '/test/repo',
-      analysisCompleteness: 100,
+      analysisCompleteness: 100, // updated below
     },
     sizing: {
       meta: makeMeta(o.sizingStatus),
@@ -178,6 +179,17 @@ function makeFullReport(overrides?: Partial<{
       moduleCohesion: [],
     },
   };
+
+  // Compute analysisCompleteness from analyzer statuses (mirrors orchestrator logic)
+  const allAnalyzers = [
+    report.sizing, report.structure, report.repoHealth, report.complexity,
+    report.testAnalysis, report.git, report.dependencies, report.security,
+    report.techStack, report.envVars, report.duplication, report.architecture,
+  ];
+  const computed = allAnalyzers.filter((a) => a.meta.status === 'computed').length;
+  report.meta.analysisCompleteness = Math.round((computed / allAnalyzers.length) * 100);
+
+  return report;
 }
 
 // --- Tests ---
@@ -564,5 +576,153 @@ describe('computeScoring — repoHealth metric extraction', () => {
     expect(health.metrics['readme']!.value).toBe(true);
     expect(health.metrics['license']!.value).toBe(false);
     expect(health.metrics['ci']!.value).toBe(false);
+  });
+});
+
+// --- New tests: All analyzers failed ---
+
+describe('computeScoring — all analyzers failed', () => {
+  it('returns normalizedScore 0 and grade INCOMPLETE when all analyzers errored', () => {
+    const rubric = loadRubric(RUBRIC_PATH);
+    const report = makeFullReport({
+      sizingStatus: 'error',
+      testingStatus: 'error',
+      complexityStatus: 'error',
+      repoHealthStatus: 'error',
+      structureStatus: 'error',
+    });
+    // Set ALL remaining analyzer metas to error
+    report.git.meta = makeMeta('error');
+    report.dependencies.meta = makeMeta('error');
+    report.security.meta = makeMeta('error');
+    report.techStack.meta = makeMeta('error');
+    report.envVars.meta = makeMeta('error');
+    report.duplication.meta = makeMeta('error');
+    report.architecture.meta = makeMeta('error');
+    // Explicitly set analysisCompleteness to 0 (orchestrator would set this)
+    report.meta.analysisCompleteness = 0;
+
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(0);
+    expect(result.totalScore).toBe(0);
+    expect(result.totalPossible).toBe(0);
+    expect(Object.keys(result.categories)).toHaveLength(0);
+    expect(result.grade).toBe('INCOMPLETE');
+  });
+});
+
+// --- New tests: Grade boundary exact values ---
+
+describe('computeScoring — grade boundary exact values', () => {
+  /**
+   * Creates a synthetic rubric with a single metric so we can control exact scores.
+   * The metric uses a single threshold: value >= 0 -> score = metricScore.
+   * By setting metricScore/maxScore we can get an exact normalizedScore.
+   */
+  function makeSingleMetricRubric(metricScore: number, maxScore: number): Rubric {
+    return {
+      version: 1,
+      totalWeight: maxScore,
+      categories: {
+        sizing: {
+          weight: maxScore,
+          metrics: {
+            godFileCount: {
+              weight: maxScore,
+              description: 'synthetic metric',
+              thresholds: [
+                { max: 1000, score: metricScore, label: 'synthetic' },
+              ],
+            },
+          },
+        },
+      },
+      gradeBoundaries: { A: 90, B: 75, C: 60, D: 40, F: 0 },
+    };
+  }
+
+  it('score exactly 90.00 gets grade A', () => {
+    // normalizedScore = (metricScore / maxScore) * 100 = (90/100)*100 = 90
+    const rubric = makeSingleMetricRubric(90, 100);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(90);
+    expect(result.grade).toBe('A');
+  });
+
+  it('score exactly 89.99 gets grade B', () => {
+    // normalizedScore = (8999/10000)*100 = 89.99
+    const rubric = makeSingleMetricRubric(8999, 10000);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(89.99);
+    expect(result.grade).toBe('B');
+  });
+
+  it('score exactly 75.00 gets grade B', () => {
+    // normalizedScore = (75/100)*100 = 75
+    const rubric = makeSingleMetricRubric(75, 100);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(75);
+    expect(result.grade).toBe('B');
+  });
+
+  it('score exactly 40.00 gets grade D', () => {
+    // normalizedScore = (40/100)*100 = 40
+    const rubric = makeSingleMetricRubric(40, 100);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(40);
+    expect(result.grade).toBe('D');
+  });
+});
+
+// --- New tests: Sizing extractor zero-division ---
+
+describe('computeScoring — sizing extractor edge cases', () => {
+  it('commentRatio is 0 when totalCodeLines and totalCommentLines are both 0', () => {
+    const rubric = loadRubric(RUBRIC_PATH);
+    // commentRatio = 0 means totalCommentLines = 0 and totalCodeLines = 1000 in our helper
+    // But to truly test zero-division, we need both to be 0.
+    // The helper derives: totalCommentLines = round(0 * 1000) = 0, totalCodeLines = 1000
+    // We need to manually override the report to set both to 0.
+    const report = makeFullReport({ commentRatio: 0 });
+    report.sizing.totalCodeLines = 0;
+    report.sizing.totalCommentLines = 0;
+
+    const result = computeScoring(report, rubric);
+
+    // The sizing extractor computes: totalCommentable = 0 + 0 = 0
+    // commentRatio = totalCommentable > 0 ? ... : 0
+    // So commentRatio should be 0, which matches "Very few comments" (max: 0.02 -> score: 1)
+    const sizingMetrics = result.categories['sizing']?.metrics;
+    expect(sizingMetrics).toBeDefined();
+    expect(sizingMetrics!['commentRatio']!.value).toBe(0);
+    // 0 <= 0.02, so it matches the last threshold: score 1
+    expect(sizingMetrics!['commentRatio']!.score).toBe(1);
+  });
+});
+
+// --- New tests: Testing extractor normalization trace ---
+
+describe('computeScoring — testing extractor normalization', () => {
+  it('testCodeRatio=50 normalizes to 0.50 matching Excellent test coverage', () => {
+    const rubric = loadRubric(RUBRIC_PATH);
+    const report = makeFullReport({ testCodeRatio: 50 });
+    const result = computeScoring(report, rubric);
+
+    const testingMetrics = result.categories['testing']?.metrics;
+    expect(testingMetrics).toBeDefined();
+    // The extractor does: testCodeRatio / 100 = 50 / 100 = 0.50
+    expect(testingMetrics!['testCodeRatio']!.value).toBe(0.50);
+    // 0.50 >= 0.50 threshold -> score: 15, label: "Excellent test coverage"
+    expect(testingMetrics!['testCodeRatio']!.score).toBe(15);
+    expect(testingMetrics!['testCodeRatio']!.label).toBe('Excellent test coverage');
   });
 });

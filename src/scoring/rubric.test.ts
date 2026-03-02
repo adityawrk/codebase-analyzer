@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
+import { writeFileSync, unlinkSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadRubric, scoreMetric } from './rubric.js';
 import type { Rubric, Threshold, RangeThreshold, ValueThreshold } from './rubric.js';
 
@@ -240,5 +243,198 @@ describe('scoreMetric — edge cases', () => {
     const result = scoreMetric('test', -3, thresholds, 10);
     expect(result.score).toBe(10);
     expect(result.label).toBe('Negative or zero');
+  });
+});
+
+// --- New tests: Invalid YAML resilience ---
+
+describe('loadRubric — invalid YAML resilience', () => {
+  function writeTempYaml(content: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'rubric-test-'));
+    const filePath = join(dir, 'rubric.yaml');
+    writeFileSync(filePath, content, 'utf-8');
+    return filePath;
+  }
+
+  it('returns default rubric for malformed YAML', () => {
+    const filePath = writeTempYaml('{{{{not valid yaml at all::::');
+    try {
+      const rubric = loadRubric(filePath);
+      expect(rubric.version).toBe(1);
+      expect(rubric.totalWeight).toBe(100);
+      expect(Object.keys(rubric.categories)).toHaveLength(0);
+      expect(rubric.gradeBoundaries.A).toBe(90);
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it('returns default rubric for empty file', () => {
+    const filePath = writeTempYaml('');
+    try {
+      const rubric = loadRubric(filePath);
+      expect(rubric.version).toBe(1);
+      expect(rubric.totalWeight).toBe(100);
+      expect(Object.keys(rubric.categories)).toHaveLength(0);
+      expect(rubric.gradeBoundaries.A).toBe(90);
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it('returns default rubric for YAML with wrong types (categories as array)', () => {
+    const yamlContent = `
+version: 1
+totalWeight: 100
+categories:
+  - sizing
+  - testing
+gradeBoundaries:
+  A: 90
+  B: 75
+  C: 60
+  D: 40
+  F: 0
+`;
+    const filePath = writeTempYaml(yamlContent);
+    try {
+      const rubric = loadRubric(filePath);
+      // categories as array should be rejected by validateCategories
+      expect(Object.keys(rubric.categories)).toHaveLength(0);
+      // But the rest of the rubric should still be parsed
+      expect(rubric.version).toBe(1);
+      expect(rubric.totalWeight).toBe(100);
+      expect(rubric.gradeBoundaries.A).toBe(90);
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+});
+
+// --- New tests: scoreMetric with null/undefined ---
+
+describe('scoreMetric — null and undefined values', () => {
+  it('returns no match for undefined value against range thresholds', () => {
+    const thresholds: Threshold[] = [
+      { max: 10, score: 5, label: 'Low' },
+      { min: 10, score: 0, label: 'High' },
+    ];
+    const result = scoreMetric('test', undefined, thresholds, 5);
+    expect(result.score).toBe(0);
+    expect(result.label).toBe('No matching threshold');
+  });
+
+  it('returns no match for null value against boolean thresholds', () => {
+    const thresholds: Threshold[] = [
+      { value: true, score: 5, label: 'Yes' },
+      { value: false, score: 0, label: 'No' },
+    ];
+    const result = scoreMetric('test', null, thresholds, 5);
+    expect(result.score).toBe(0);
+    expect(result.label).toBe('No matching threshold');
+  });
+});
+
+// --- New tests: scoreMetric with Infinity ---
+
+describe('scoreMetric — Infinity values', () => {
+  const rangeThresholds: Threshold[] = [
+    { max: 10, score: 5, label: 'Low' },
+    { min: 10, score: 0, label: 'High' },
+  ];
+
+  it('returns no match for Infinity against range thresholds', () => {
+    const result = scoreMetric('test', Infinity, rangeThresholds, 5);
+    expect(result.score).toBe(0);
+    expect(result.label).toBe('No matching threshold');
+  });
+
+  it('returns no match for -Infinity against range thresholds', () => {
+    const result = scoreMetric('test', -Infinity, rangeThresholds, 5);
+    expect(result.score).toBe(0);
+    expect(result.label).toBe('No matching threshold');
+  });
+});
+
+// --- New tests: scoreMetric with both min and max ---
+
+describe('scoreMetric — min+max range thresholds', () => {
+  const bandedThresholds: Threshold[] = [
+    { min: 0, max: 5, score: 10, label: 'Excellent' },
+    { min: 6, max: 10, score: 7, label: 'Good' },
+    { min: 11, max: 20, score: 3, label: 'Moderate' },
+    { min: 21, score: 0, label: 'Poor' },
+  ];
+
+  it('matches value in min+max range', () => {
+    const result = scoreMetric('metric', 3, bandedThresholds, 10);
+    expect(result.score).toBe(10);
+    expect(result.label).toBe('Excellent');
+
+    const result2 = scoreMetric('metric', 8, bandedThresholds, 10);
+    expect(result2.score).toBe(7);
+    expect(result2.label).toBe('Good');
+
+    const result3 = scoreMetric('metric', 15, bandedThresholds, 10);
+    expect(result3.score).toBe(3);
+    expect(result3.label).toBe('Moderate');
+  });
+
+  it('rejects value outside min+max range', () => {
+    // Value 5.5 is above the first band (max: 5) but below the second band (min: 6)
+    const gapThresholds: Threshold[] = [
+      { min: 0, max: 5, score: 10, label: 'Low' },
+      { min: 6, max: 10, score: 5, label: 'Mid' },
+    ];
+    const result = scoreMetric('metric', 5.5, gapThresholds, 10);
+    expect(result.score).toBe(0);
+    expect(result.label).toBe('No matching threshold');
+  });
+});
+
+// --- New tests: Prototype pollution protection ---
+
+describe('loadRubric — prototype pollution protection', () => {
+  it('filters __proto__ keys from rubric categories', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rubric-proto-'));
+    const filePath = join(dir, 'rubric.yaml');
+    const yamlContent = `
+version: 1
+totalWeight: 100
+categories:
+  __proto__:
+    weight: 50
+    metrics:
+      evilMetric:
+        weight: 50
+        description: "should be filtered"
+        thresholds:
+          - { max: 10, score: 50, label: "evil" }
+  sizing:
+    weight: 10
+    metrics:
+      godFileCount:
+        weight: 10
+        description: "safe metric"
+        thresholds:
+          - { max: 0, score: 10, label: "No god files" }
+gradeBoundaries:
+  A: 90
+  B: 75
+  C: 60
+  D: 40
+  F: 0
+`;
+    writeFileSync(filePath, yamlContent, 'utf-8');
+    try {
+      const rubric = loadRubric(filePath);
+      // __proto__ should be filtered out
+      expect(Object.hasOwn(rubric.categories, '__proto__')).toBe(false);
+      // Normal category should still be present
+      expect(rubric.categories['sizing']).toBeDefined();
+      expect(rubric.categories['sizing']!.metrics['godFileCount']).toBeDefined();
+    } finally {
+      unlinkSync(filePath);
+    }
   });
 });
