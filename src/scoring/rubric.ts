@@ -97,7 +97,10 @@ function validateCategories(
     if (!val || typeof val !== 'object' || Array.isArray(val)) continue;
 
     const cat = val as Record<string, unknown>;
-    const weight = typeof cat['weight'] === 'number' ? cat['weight'] : 0;
+    const rawWeight = cat['weight'];
+    const weight = typeof rawWeight === 'number' && Number.isFinite(rawWeight) && rawWeight >= 0
+      ? rawWeight
+      : 0;
     const rawMetrics = cat['metrics'];
     if (!rawMetrics || typeof rawMetrics !== 'object' || Array.isArray(rawMetrics)) continue;
 
@@ -110,13 +113,30 @@ function validateCategories(
         break;
       }
       const m = mVal as Record<string, unknown>;
-      if (typeof m['weight'] !== 'number') { valid = false; break; }
+      const mWeight = m['weight'];
+      if (typeof mWeight !== 'number' || !Number.isFinite(mWeight) || mWeight < 0) {
+        valid = false; break;
+      }
       if (!Array.isArray(m['thresholds'])) { valid = false; break; }
 
+      // Validate individual threshold entries — filter out malformed ones
+      const validThresholds: Threshold[] = [];
+      for (const t of m['thresholds'] as unknown[]) {
+        if (!t || typeof t !== 'object' || Array.isArray(t)) continue;
+        const tObj = t as Record<string, unknown>;
+        if (typeof tObj['score'] !== 'number' || !Number.isFinite(tObj['score'])) continue;
+        // Must be a value threshold or range threshold
+        const hasValue = 'value' in tObj;
+        const hasMin = 'min' in tObj && (typeof tObj['min'] === 'number');
+        const hasMax = 'max' in tObj && (typeof tObj['max'] === 'number');
+        if (!hasValue && !hasMin && !hasMax) continue;
+        validThresholds.push(t as Threshold);
+      }
+
       metrics[mKey] = {
-        weight: m['weight'] as number,
+        weight: mWeight,
         description: typeof m['description'] === 'string' ? m['description'] as string : '',
-        thresholds: m['thresholds'] as Threshold[],
+        thresholds: validThresholds,
       };
     }
     if (!valid) continue;

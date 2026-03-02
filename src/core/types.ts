@@ -219,6 +219,7 @@ export interface TestAnalysis {
   testFiles: number;
   testLines: number;
   codeLines: number;
+  /** Percentage value (e.g. 50 means 50%). Scoring engine divides by 100 to normalize to 0-1. */
   testCodeRatio: number;
   testFrameworks: string[];
   coverageConfigFound: boolean;

@@ -437,4 +437,100 @@ gradeBoundaries:
       unlinkSync(filePath);
     }
   });
+
+  it('filters constructor and prototype keys from categories and metrics', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rubric-proto2-'));
+    const filePath = join(dir, 'rubric.yaml');
+    const yamlContent = `
+version: 1
+totalWeight: 100
+categories:
+  constructor:
+    weight: 30
+    metrics:
+      evilMetric:
+        weight: 30
+        description: "should be filtered"
+        thresholds:
+          - { max: 10, score: 30, label: "evil" }
+  prototype:
+    weight: 30
+    metrics:
+      evilMetric:
+        weight: 30
+        description: "should be filtered"
+        thresholds:
+          - { max: 10, score: 30, label: "evil" }
+  sizing:
+    weight: 10
+    metrics:
+      __proto__:
+        weight: 5
+        description: "metric-level proto"
+        thresholds:
+          - { max: 10, score: 5, label: "evil" }
+      godFileCount:
+        weight: 10
+        description: "safe"
+        thresholds:
+          - { max: 0, score: 10, label: "No god files" }
+gradeBoundaries:
+  A: 90
+  B: 75
+  C: 60
+  D: 40
+  F: 0
+`;
+    writeFileSync(filePath, yamlContent, 'utf-8');
+    try {
+      const rubric = loadRubric(filePath);
+      expect(Object.hasOwn(rubric.categories, 'constructor')).toBe(false);
+      expect(Object.hasOwn(rubric.categories, 'prototype')).toBe(false);
+      // Metric-level __proto__ should also be filtered
+      expect(rubric.categories['sizing']).toBeDefined();
+      expect(Object.hasOwn(rubric.categories['sizing']!.metrics, '__proto__')).toBe(false);
+      expect(rubric.categories['sizing']!.metrics['godFileCount']).toBeDefined();
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it('filters malformed threshold entries from thresholds array', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rubric-thresh-'));
+    const filePath = join(dir, 'rubric.yaml');
+    const yamlContent = `
+version: 1
+totalWeight: 10
+categories:
+  sizing:
+    weight: 10
+    metrics:
+      godFileCount:
+        weight: 10
+        description: "test"
+        thresholds:
+          - "not an object"
+          - 42
+          - { max: 3, score: .nan, label: "nan score" }
+          - { max: 3, score: .inf, label: "inf score" }
+          - { garbage: true }
+          - { max: 0, score: 10, label: "Good" }
+gradeBoundaries:
+  A: 90
+  B: 75
+  C: 60
+  D: 40
+  F: 0
+`;
+    writeFileSync(filePath, yamlContent, 'utf-8');
+    try {
+      const rubric = loadRubric(filePath);
+      const thresholds = rubric.categories['sizing']!.metrics['godFileCount']!.thresholds;
+      // Only the last valid threshold should survive
+      expect(thresholds.length).toBe(1);
+      expect((thresholds[0] as any).score).toBe(10);
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
 });

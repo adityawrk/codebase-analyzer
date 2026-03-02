@@ -652,13 +652,11 @@
       "properties": {
         "totalScore": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 100
+          "minimum": 0
         },
         "totalPossible": {
           "type": "number",
           "minimum": 0,
-          "maximum": 100,
           "description": "Sum of weights for computed (non-skipped) categories"
         },
         "normalizedScore": {

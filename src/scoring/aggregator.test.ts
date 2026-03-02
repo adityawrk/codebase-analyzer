@@ -681,6 +681,140 @@ describe('computeScoring — grade boundary exact values', () => {
     expect(result.normalizedScore).toBe(40);
     expect(result.grade).toBe('D');
   });
+
+  it('score exactly 0.00 with sufficient completeness gets grade F', () => {
+    const rubric = makeSingleMetricRubric(0, 100);
+    const report = makeFullReport({ godFileCount: 0 });
+    // Ensure completeness >= 60 so we don't get INCOMPLETE
+    expect(report.meta.analysisCompleteness).toBeGreaterThanOrEqual(60);
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(0);
+    expect(result.grade).toBe('F');
+  });
+
+  it('score exactly 100.00 gets grade A', () => {
+    const rubric = makeSingleMetricRubric(100, 100);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(100);
+    expect(result.grade).toBe('A');
+  });
+
+  it('score exactly 60.00 gets grade C', () => {
+    const rubric = makeSingleMetricRubric(60, 100);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(60);
+    expect(result.grade).toBe('C');
+  });
+
+  it('score exactly 59.99 gets grade D', () => {
+    const rubric = makeSingleMetricRubric(5999, 10000);
+    const report = makeFullReport({ godFileCount: 0 });
+    const result = computeScoring(report, rubric);
+
+    expect(result.normalizedScore).toBe(59.99);
+    expect(result.grade).toBe('D');
+  });
+});
+
+// --- New tests: analysisCompleteness boundary at 60% ---
+
+describe('computeScoring — analysisCompleteness boundary', () => {
+  function makeSingleMetricRubric(metricScore: number, maxScore: number): Rubric {
+    return {
+      version: 1,
+      totalWeight: maxScore,
+      categories: {
+        sizing: {
+          weight: maxScore,
+          metrics: {
+            godFileCount: {
+              weight: maxScore,
+              description: 'synthetic',
+              thresholds: [{ max: 1000, score: metricScore, label: 'synthetic' }],
+            },
+          },
+        },
+      },
+      gradeBoundaries: { A: 90, B: 75, C: 60, D: 40, F: 0 },
+    };
+  }
+
+  it('analysisCompleteness exactly 60 does NOT yield INCOMPLETE', () => {
+    const rubric = makeSingleMetricRubric(90, 100);
+    const report = makeFullReport();
+    report.meta.analysisCompleteness = 60;
+    const result = computeScoring(report, rubric);
+    expect(result.grade).not.toBe('INCOMPLETE');
+  });
+
+  it('analysisCompleteness exactly 59 yields INCOMPLETE', () => {
+    const rubric = makeSingleMetricRubric(90, 100);
+    const report = makeFullReport();
+    report.meta.analysisCompleteness = 59;
+    const result = computeScoring(report, rubric);
+    expect(result.grade).toBe('INCOMPLETE');
+  });
+});
+
+// --- New tests: Extractor-rubric alignment ---
+
+describe('computeScoring — extractor-rubric alignment', () => {
+  it('rubric category with no extractor is excluded from scoring', () => {
+    const rubric: Rubric = {
+      version: 1,
+      totalWeight: 20,
+      categories: {
+        sizing: {
+          weight: 10,
+          metrics: {
+            godFileCount: {
+              weight: 10,
+              description: 'has extractor',
+              thresholds: [{ max: 1000, score: 10, label: 'ok' }],
+            },
+          },
+        },
+        nonexistentCategory: {
+          weight: 10,
+          metrics: {
+            fakeMetric: {
+              weight: 10,
+              description: 'no extractor',
+              thresholds: [{ max: 100, score: 10, label: 'fake' }],
+            },
+          },
+        },
+      },
+      gradeBoundaries: { A: 90, B: 75, C: 60, D: 40, F: 0 },
+    };
+    const report = makeFullReport();
+    const result = computeScoring(report, rubric);
+
+    // nonexistentCategory should be excluded
+    expect(result.categories['nonexistentCategory']).toBeUndefined();
+    // sizing should still be scored — totalPossible = 10 (not 20)
+    expect(result.categories['sizing']).toBeDefined();
+    expect(result.totalPossible).toBe(10);
+  });
+
+  it('all default rubric categories have registered extractors', () => {
+    const rubric = loadRubric(RUBRIC_PATH);
+    const report = makeFullReport();
+    const result = computeScoring(report, rubric);
+
+    // Every rubric category should appear in the scoring result
+    for (const categoryName of Object.keys(rubric.categories)) {
+      expect(
+        result.categories[categoryName],
+        `Category "${categoryName}" from rubric should have an extractor`,
+      ).toBeDefined();
+    }
+  });
 });
 
 // --- New tests: Sizing extractor zero-division ---
