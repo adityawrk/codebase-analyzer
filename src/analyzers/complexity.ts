@@ -29,16 +29,25 @@ import {
 
 /** Node types that represent function boundaries. */
 const FUNCTION_NODE_TYPES = new Set([
+  // TypeScript / JavaScript
   'function_declaration',
   'generator_function_declaration',
   'function_expression',
   'generator_function',
   'arrow_function',
   'method_definition',
+  // Python
+  'function_definition',
+  'lambda',
+  // Go
+  'method_declaration',
+  'func_literal',
+  // Note: 'function_declaration' is shared by JS/TS and Go
 ]);
 
 /** Node types that are always a +1 decision point. */
 const DECISION_POINT_TYPES = new Set([
+  // Shared / TypeScript / JavaScript
   'if_statement',
   'for_statement',
   'for_in_statement', // covers both for...in and for...of in tree-sitter
@@ -47,6 +56,18 @@ const DECISION_POINT_TYPES = new Set([
   'switch_case', // each case label; switch_default is excluded
   'catch_clause',
   'ternary_expression',
+  // Python
+  'except_clause',
+  'elif_clause', // Python elif — each elif is a separate clause in the AST
+  'conditional_expression', // Python ternary: x if cond else y
+  'list_comprehension',
+  'set_comprehension',
+  'dictionary_comprehension',
+  'generator_expression',
+  // Go
+  'expression_case', // case in switch/select
+  'communication_case', // case in select statement
+  'type_case', // case in type switch
 ]);
 
 /** Binary expression operators that increment complexity. */
@@ -69,10 +90,18 @@ function getDecisionPointScore(node: SyntaxNode): number {
     return 1;
   }
 
-  // Logical operators: binary_expression with &&, ||, or ??
+  // Logical operators: binary_expression with &&, ||, or ?? (JS/TS/Go)
   if (node.type === 'binary_expression') {
     const operator = node.child(1);
     if (operator && COMPLEXITY_OPERATORS.has(operator.type)) {
+      return 1;
+    }
+  }
+
+  // Python logical operators: boolean_operator with 'and' or 'or'
+  if (node.type === 'boolean_operator') {
+    const operator = node.child(1);
+    if (operator && (operator.type === 'and' || operator.type === 'or')) {
       return 1;
     }
   }
@@ -113,14 +142,79 @@ function countComplexity(node: SyntaxNode): number {
 function extractFunctionName(node: SyntaxNode): string {
   const type = node.type;
 
-  // Named function or generator function declaration
-  if (type === 'function_declaration' || type === 'generator_function_declaration') {
+  // Named function or generator function declaration (JS/TS/Go)
+  // Also handles Python function_definition (same child structure: identifier child)
+  if (
+    type === 'function_declaration' ||
+    type === 'generator_function_declaration' ||
+    type === 'function_definition'
+  ) {
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
       if (child?.type === 'identifier') {
         return child.text;
       }
     }
+    return '<anonymous>';
+  }
+
+  // Python lambda — always unnamed
+  if (type === 'lambda') {
+    return '<lambda>';
+  }
+
+  // Go method declaration — name is a field_identifier child
+  if (type === 'method_declaration') {
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child?.type === 'field_identifier') {
+        return child.text;
+      }
+    }
+    return '<anonymous>';
+  }
+
+  // Go func literal — check parent chain for short_var_declaration, var_spec, or assignment_statement.
+  // In Go's AST, func_literal is wrapped in expression_list, so the actual declaration is the grandparent.
+  if (type === 'func_literal') {
+    // Walk up through expression_list wrappers to find the declaration node
+    let ancestor = node.parent;
+    if (ancestor?.type === 'expression_list') {
+      ancestor = ancestor.parent;
+    }
+
+    // x := func() {} (short_var_declaration)
+    if (ancestor?.type === 'short_var_declaration') {
+      const left = ancestor.child(0);
+      if (left?.type === 'expression_list') {
+        const ident = left.child(0);
+        if (ident?.type === 'identifier') {
+          return ident.text;
+        }
+      }
+    }
+
+    // var x = func() {} (var_spec)
+    if (ancestor?.type === 'var_spec') {
+      for (let i = 0; i < ancestor.childCount; i++) {
+        const child = ancestor.child(i);
+        if (child?.type === 'identifier') {
+          return child.text;
+        }
+      }
+    }
+
+    // x = func() {} (assignment_statement)
+    if (ancestor?.type === 'assignment_statement') {
+      const left = ancestor.child(0);
+      if (left?.type === 'expression_list') {
+        const ident = left.child(0);
+        if (ident?.type === 'identifier') {
+          return ident.text;
+        }
+      }
+    }
+
     return '<anonymous>';
   }
 
@@ -186,12 +280,16 @@ function extractFunctionName(node: SyntaxNode): string {
 /**
  * Recursively collect all function nodes from the AST.
  * Returns a flat list — nested functions are discovered as we walk deeper.
+ *
+ * Filters out anonymous (keyword) nodes: in the Python grammar, the `lambda`
+ * keyword token shares the same type string as the `lambda` expression node.
+ * Only named (non-keyword) nodes are actual function boundaries.
  */
 function collectFunctions(node: SyntaxNode): SyntaxNode[] {
   const functions: SyntaxNode[] = [];
 
   function walk(n: SyntaxNode): void {
-    if (isFunctionNode(n.type)) {
+    if (isFunctionNode(n.type) && n.isNamed()) {
       functions.push(n);
     }
     for (let i = 0; i < n.childCount; i++) {

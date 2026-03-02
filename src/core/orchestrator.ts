@@ -16,11 +16,15 @@ import { analyzeDependencies } from '../analyzers/dependencies.js';
 import { analyzeSecurity } from '../analyzers/security.js';
 import { analyzeTechStack } from '../analyzers/tech-stack.js';
 import { analyzeEnvVars } from '../analyzers/env-vars.js';
+import { analyzeDuplication } from '../analyzers/duplication.js';
+import { analyzeArchitecture } from '../analyzers/architecture.js';
 import type {
   AnalysisConfig,
   AnalyzerMeta,
+  ArchitectureResult,
   ComplexityResult,
   DependencyResult,
+  DuplicationResult,
   EnvVarsResult,
   GitAnalysisResult,
   RepoHealthResult,
@@ -145,6 +149,27 @@ function emptyEnvVars(): EnvVarsResult {
   };
 }
 
+function emptyDuplication(): DuplicationResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    duplicateLines: 0,
+    duplicatePercentage: 0,
+    totalClones: 0,
+    clones: [],
+  };
+}
+
+function emptyArchitecture(): ArchitectureResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    totalImports: 0,
+    uniqueModules: 0,
+    importGraph: [],
+    circularDependencies: [],
+    moduleCohesion: [],
+  };
+}
+
 async function runWithTiming<T>(
   name: string,
   fn: () => Promise<T>,
@@ -217,11 +242,22 @@ export async function analyzeRepository(
     () => analyzeEnvVars(index),
     emptyEnvVars,
   );
+  const duplication = await runWithTiming(
+    'duplication',
+    () => analyzeDuplication(index),
+    emptyDuplication,
+  );
+  const architecture = await runWithTiming(
+    'architecture',
+    () => analyzeArchitecture(index),
+    emptyArchitecture,
+  );
 
   // Calculate analysis completeness
   const allAnalyzers = [
     sizing, structure, repoHealth, complexity, testAnalysis,
     git, dependencies, security, techStack, envVars,
+    duplication, architecture,
   ];
   const computed = allAnalyzers.filter((a) => a.meta.status === 'computed').length;
   const completeness = Math.round((computed / allAnalyzers.length) * 100);
@@ -245,5 +281,7 @@ export async function analyzeRepository(
     security,
     techStack,
     envVars,
+    duplication,
+    architecture,
   };
 }

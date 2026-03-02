@@ -15,6 +15,9 @@ import type {
   ManifestType,
 } from '../core/types.js';
 import { parseNpmManifest } from './adapters/npm-adapter.js';
+import { parseCargoManifest } from './adapters/cargo-adapter.js';
+import { parseGoMod } from './adapters/go-adapter.js';
+import { parsePythonRequirements } from './adapters/pypi-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Lockfile → package manager mapping
@@ -64,8 +67,8 @@ async function detectPackageManager(root: string): Promise<string | null> {
 // Placeholder adapter for ecosystems not yet implemented
 // ---------------------------------------------------------------------------
 
-function placeholderEntries(ecosystem: string): DependencyEntry[] {
-  // Future adapters (cargo, go, python) will replace these placeholders.
+function placeholderEntries(_ecosystem: string): DependencyEntry[] {
+  // Future adapters (maven, gradle) will replace these placeholders.
   // Return empty for now — the manifest is acknowledged but not parsed.
   return [];
 }
@@ -86,12 +89,12 @@ async function parseManifest(
     case 'npm':
       return parseNpmManifest(root, manifestPath);
     case 'cargo':
-      return placeholderEntries('cargo');
+      return parseCargoManifest(root, manifestPath);
     case 'go':
-      return placeholderEntries('go');
+      return parseGoMod(root, manifestPath);
     case 'python-requirements':
     case 'python-pyproject':
-      return placeholderEntries('python');
+      return parsePythonRequirements(root, manifestPath);
     case 'maven':
       return placeholderEntries('maven');
     case 'gradle':
