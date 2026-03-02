@@ -44,6 +44,9 @@ const RESOLVE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go'];
 /** Index filenames to try when an import resolves to a directory. */
 const INDEX_FILENAMES = ['index.ts', 'index.js'];
 
+/** Python package init files to try when resolving a module as a package. */
+const PYTHON_INIT_FILENAMES = ['__init__.py'];
+
 // ── Import Extraction ──────────────────────────────────────────────
 
 /**
@@ -287,6 +290,134 @@ function resolveRelativeImport(
   return null;
 }
 
+// ── Go Internal Import Resolution ──────────────────────────────────
+
+/**
+ * Parse the module path from a go.mod file's content.
+ * Extracts the `module` directive value, e.g. "github.com/user/project".
+ *
+ * @param goModContent - The raw content of go.mod
+ * @returns The module path, or null if not found.
+ */
+export function parseGoModulePath(goModContent: string): string | null {
+  // go.mod format: `module github.com/user/project`
+  const match = goModContent.match(/^\s*module\s+(\S+)/m);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Resolve a Go import to an internal repo file path.
+ *
+ * Go imports are always absolute package paths (e.g. "github.com/user/project/pkg/foo").
+ * If the import starts with the module path, it is internal. We strip the module prefix
+ * and look for matching .go files within the resulting directory.
+ *
+ * @param specifier    - The Go import path (e.g. "github.com/user/project/internal/db")
+ * @param goModulePath - The module path from go.mod (e.g. "github.com/user/project")
+ * @param filePathSet  - Set of all relative file paths in the repo (for fast lookup)
+ * @returns A resolved relative file path, or null if resolution fails.
+ */
+function resolveGoInternalImport(
+  specifier: string,
+  goModulePath: string,
+  filePathSet: Set<string>,
+): string | null {
+  if (specifier !== goModulePath && !specifier.startsWith(goModulePath + '/')) return null;
+
+  // Strip the module prefix: "github.com/user/project/pkg/foo" → "pkg/foo"
+  let subPath = specifier.slice(goModulePath.length);
+  // Remove leading slash
+  if (subPath.startsWith('/')) subPath = subPath.slice(1);
+
+  // If subPath is empty, it refers to the root package
+  if (!subPath) subPath = '.';
+
+  // Go packages map to directories. Look for any .go file in that directory.
+  // We try to find at least one .go file in the directory to create the edge.
+  const prefix = subPath === '.' ? '' : subPath + '/';
+
+  for (const filePath of filePathSet) {
+    if (!filePath.endsWith('.go')) continue;
+    if (prefix === '') {
+      // Root package — match files directly in root (no '/' in path)
+      if (!filePath.includes('/')) return filePath;
+    } else if (filePath.startsWith(prefix)) {
+      // Check that it's directly in this directory, not a subdirectory
+      const remainder = filePath.slice(prefix.length);
+      if (!remainder.includes('/')) return filePath;
+    }
+  }
+
+  return null;
+}
+
+// ── Python Relative Import Resolution ──────────────────────────────
+
+/**
+ * Resolve a Python relative import specifier to an actual file path.
+ *
+ * Python relative imports use leading dots for package-level traversal:
+ * - `.module` from `src/pkg/main.py` → `src/pkg/module.py` or `src/pkg/module/__init__.py`
+ * - `..utils` from `src/pkg/sub/main.py` → `src/pkg/utils.py` or `src/pkg/utils/__init__.py`
+ * - `...` from `src/a/b/c.py` → `src/__init__.py`
+ *
+ * @param specifier   - The raw relative import (e.g. ".module", "..utils.helper")
+ * @param fromFile    - The relative path of the importing file
+ * @param filePathSet - Set of all relative file paths in the repo
+ * @returns The resolved relative path, or null if resolution fails.
+ */
+function resolvePythonRelativeImport(
+  specifier: string,
+  fromFile: string,
+  filePathSet: Set<string>,
+): string | null {
+  // Count leading dots to determine the level of traversal
+  let dots = 0;
+  while (dots < specifier.length && specifier[dots] === '.') {
+    dots++;
+  }
+
+  // The module part after the dots (may be empty for bare `from . import x`)
+  const modulePart = specifier.slice(dots);
+
+  // Start from the directory of the importing file
+  let baseDir = path.dirname(fromFile);
+
+  // Each dot represents one level up EXCEPT the first dot which means "current package".
+  // `.module` → 0 levels up from current dir (1 dot = same dir)
+  // `..module` → 1 level up (2 dots = parent dir)
+  // `...module` → 2 levels up
+  const levelsUp = dots - 1;
+  for (let i = 0; i < levelsUp; i++) {
+    baseDir = path.dirname(baseDir);
+  }
+
+  if (!modulePart) {
+    // Bare relative import like `from . import x` — resolves to __init__.py of the package
+    for (const initFile of PYTHON_INIT_FILENAMES) {
+      const candidate = normalizePath(path.join(baseDir, initFile));
+      if (filePathSet.has(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  // Convert dotted module path to directory segments: "utils.helper" → "utils/helper"
+  const segments = modulePart.split('.');
+  const modulePath = normalizePath(path.join(baseDir, ...segments));
+
+  // 1. Try as a .py file directly
+  const pyCandidate = modulePath + '.py';
+  if (filePathSet.has(pyCandidate)) return pyCandidate;
+
+  // 2. Try as a package directory with __init__.py
+  for (const initFile of PYTHON_INIT_FILENAMES) {
+    const candidate = normalizePath(path.join(modulePath, initFile));
+    if (filePathSet.has(candidate)) return candidate;
+  }
+
+  return null;
+}
+
 // ── Circular Dependency Detection ──────────────────────────────────
 
 /**
@@ -509,6 +640,19 @@ export async function analyzeArchitecture(
       filePathSet.add(file.path);
     }
 
+    // Read Go module path from go.mod if present
+    let goModulePath: string | null = null;
+    const goManifest = index.manifests.find((m) => m.type === 'go');
+    if (goManifest) {
+      const goModAbsPath = path.join(index.root, goManifest.path);
+      try {
+        const goModContent = await fs.readFile(goModAbsPath, 'utf-8');
+        goModulePath = parseGoModulePath(goModContent);
+      } catch {
+        // go.mod unreadable — degrade gracefully, Go imports stay unresolved
+      }
+    }
+
     // Extract imports from all parseable files
     const allEdges: ImportEdge[] = [];
     const adjacency = new Map<string, string[]>();
@@ -533,9 +677,19 @@ export async function analyzeArchitecture(
       const rawImports = await extractImports(content, language, file.path);
 
       for (const raw of rawImports) {
-        if (!raw.isRelative) continue;
+        let resolved: string | null = null;
 
-        const resolved = resolveRelativeImport(raw.specifier, file.path, filePathSet);
+        if (language === 'go' && !raw.isRelative && goModulePath) {
+          // Go: all imports are non-relative, but internal ones start with the module path
+          resolved = resolveGoInternalImport(raw.specifier, goModulePath, filePathSet);
+        } else if (language === 'python' && raw.isRelative) {
+          // Python: relative imports use leading dots, not filesystem paths
+          resolved = resolvePythonRelativeImport(raw.specifier, file.path, filePathSet);
+        } else if (raw.isRelative) {
+          // JS/TS and other languages with filesystem-style relative imports
+          resolved = resolveRelativeImport(raw.specifier, file.path, filePathSet);
+        }
+
         if (!resolved) continue;
 
         // Skip self-imports
