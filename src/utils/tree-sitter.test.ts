@@ -5,12 +5,15 @@ import {
   parseSource,
   getLanguageForExtension,
 } from './tree-sitter.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 beforeAll(async () => {
-  await initTreeSitter();
+  if (process.env.VITEST === 'true') {
+    await initTreeSitter();
+  }
 });
 
-describe('initTreeSitter', () => {
+describe.skipIf(SKIP_NON_VITEST)('initTreeSitter', () => {
   it('does not throw on first call', async () => {
     // Already called in beforeAll — calling again to verify idempotency.
     await expect(initTreeSitter()).resolves.toBeUndefined();
@@ -23,7 +26,7 @@ describe('initTreeSitter', () => {
   });
 });
 
-describe('createParser', () => {
+describe.skipIf(SKIP_NON_VITEST)('createParser', () => {
   it('returns a parser for typescript', async () => {
     const parser = await createParser('typescript');
     expect(parser).not.toBeNull();
@@ -61,7 +64,7 @@ describe('createParser', () => {
   });
 });
 
-describe('parseSource', () => {
+describe.skipIf(SKIP_NON_VITEST)('parseSource', () => {
   it('parses a simple TypeScript function', async () => {
     const source = 'function hello() { return 1; }';
     const tree = await parseSource(source, 'typescript');

@@ -12,9 +12,12 @@ import { analyzeArchitecture, extractImports, parseGoModulePath } from './archit
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import { initTreeSitter } from '../utils/tree-sitter.js';
 import type { AnalysisConfig, RepositoryIndex, FileEntry, ManifestEntry, GitMeta } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 beforeAll(async () => {
-  await initTreeSitter();
+  if (process.env.VITEST === 'true') {
+    await initTreeSitter();
+  }
 });
 
 // ── Helper ──────────────────────────────────────────────────────────
@@ -40,7 +43,7 @@ async function buildTestIndex() {
 
 // ── Unit Tests: extractImports ──────────────────────────────────────
 
-describe('extractImports', () => {
+describe.skipIf(SKIP_NON_VITEST)('extractImports', () => {
   describe('TypeScript / JavaScript', () => {
     it('extracts a named import from a relative path', async () => {
       const source = `import { foo } from './bar.js';`;
@@ -213,7 +216,7 @@ describe('parseGoModulePath', () => {
 
 // ── Synthetic Integration Tests: Go internal imports ────────────────
 
-describe('analyzeArchitecture — Go internal imports', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeArchitecture — Go internal imports', () => {
   /**
    * Build a minimal synthetic RepositoryIndex that simulates a Go project.
    */
@@ -355,7 +358,7 @@ import (
 
 // ── Synthetic Integration Tests: Python relative imports ────────────
 
-describe('analyzeArchitecture — Python relative imports', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeArchitecture — Python relative imports', () => {
   it('extracts relative import specifiers correctly from Python', async () => {
     const source = `from .utils import helper
 from ..models import User
@@ -414,7 +417,7 @@ from . import config
 
 // ── Full Resolution Tests via analyzeArchitecture with temp files ────
 
-describe('analyzeArchitecture — Go + Python resolution (filesystem)', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeArchitecture — Go + Python resolution (filesystem)', () => {
   const os = require('node:os');
   const fsSync = require('node:fs');
   const fsp = require('node:fs/promises');
@@ -617,7 +620,7 @@ func main() {}
 
 // ── Integration Tests: analyzeArchitecture ──────────────────────────
 
-describe('analyzeArchitecture (integration)', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeArchitecture (integration)', () => {
   it('returns computed status', async () => {
     const index = await buildTestIndex();
     const result = await analyzeArchitecture(index);

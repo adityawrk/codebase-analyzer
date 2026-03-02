@@ -5,7 +5,9 @@
  * Uses web-tree-sitter (WASM) instead of node-tree-sitter (native bindings)
  * because native bindings fail to compile with Node 25.
  *
- * WASM grammar files are loaded from tree-sitter-wasms/out/.
+ * WASM resolution order:
+ *   1. CODEBASE_ANALYZER_WASM_DIR env var (set by Homebrew wrapper, Docker, etc.)
+ *   2. node_modules via require.resolve (development / npm install)
  */
 
 import Parser from 'web-tree-sitter';
@@ -13,6 +15,13 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+
+/**
+ * Directory override for WASM files. When set (e.g. by a Homebrew wrapper
+ * script or Docker entrypoint), all WASM files are loaded from this directory
+ * instead of from node_modules.
+ */
+const WASM_DIR_OVERRIDE = process.env['CODEBASE_ANALYZER_WASM_DIR'] || null;
 
 // Re-export types that callers will need.
 export type { Parser };
@@ -55,10 +64,12 @@ const EXTENSION_MAP: Record<string, string> = {
 export async function initTreeSitter(): Promise<void> {
   if (initialized) return;
 
-  const treeSitterWasmPath = path.join(
-    path.dirname(require.resolve('web-tree-sitter/package.json')),
-    'tree-sitter.wasm',
-  );
+  const treeSitterWasmPath = WASM_DIR_OVERRIDE
+    ? path.join(WASM_DIR_OVERRIDE, 'tree-sitter.wasm')
+    : path.join(
+        path.dirname(require.resolve('web-tree-sitter/package.json')),
+        'tree-sitter.wasm',
+      );
 
   await Parser.init({
     locateFile: () => treeSitterWasmPath,
@@ -128,11 +139,13 @@ async function loadLanguage(language: string): Promise<Parser.Language | null> {
   if (cached) return cached;
 
   try {
-    const wasmPath = path.join(
-      path.dirname(require.resolve('tree-sitter-wasms/package.json')),
-      'out',
-      `tree-sitter-${language}.wasm`,
-    );
+    const wasmPath = WASM_DIR_OVERRIDE
+      ? path.join(WASM_DIR_OVERRIDE, `tree-sitter-${language}.wasm`)
+      : path.join(
+          path.dirname(require.resolve('tree-sitter-wasms/package.json')),
+          'out',
+          `tree-sitter-${language}.wasm`,
+        );
 
     const lang = await Parser.Language.load(wasmPath);
     languageCache.set(language, lang);

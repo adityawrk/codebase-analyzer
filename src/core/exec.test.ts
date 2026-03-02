@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { execTool, checkTool } from './exec.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
-describe('checkTool', () => {
+describe.skipIf(SKIP_NON_VITEST)('checkTool', () => {
   it('returns true for a tool that exists (node)', async () => {
     const result = await checkTool('node');
     expect(result).toBe(true);
@@ -13,7 +14,7 @@ describe('checkTool', () => {
   });
 });
 
-describe('execTool', () => {
+describe.skipIf(SKIP_NON_VITEST)('execTool', () => {
   it('captures stdout, exitCode 0 for echo', async () => {
     const result = await execTool('echo', ['hello']);
     expect(result.stdout).toBe('hello\n');

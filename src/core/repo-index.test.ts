@@ -3,12 +3,13 @@ import * as path from 'node:path';
 import { buildRepositoryIndex } from './repo-index.js';
 import type { AnalysisConfig } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 function makeConfig(root: string): AnalysisConfig {
   return { ...DEFAULT_CONFIG, root };
 }
 
-describe('buildRepositoryIndex', () => {
+describe.skipIf(SKIP_NON_VITEST)('buildRepositoryIndex', () => {
   it('builds an index for the current project', async () => {
     const root = path.resolve(import.meta.dirname, '../..');
     const index = await buildRepositoryIndex(root, makeConfig(root));

@@ -17,6 +17,7 @@ import {
   isTestFile,
 } from './file-policy.js';
 import type { AnalysisConfig } from './types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -222,7 +223,7 @@ describe('isTestFile', () => {
 // isBinary
 // ---------------------------------------------------------------------------
 
-describe('isBinary', () => {
+describe.skipIf(SKIP_NON_VITEST)('isBinary', () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -277,7 +278,7 @@ describe('isBinary', () => {
 // buildFileList — integration tests with temp directories
 // ---------------------------------------------------------------------------
 
-describe('buildFileList', () => {
+describe.skipIf(SKIP_NON_VITEST)('buildFileList', () => {
   let tmpDir: string;
 
   beforeEach(async () => {

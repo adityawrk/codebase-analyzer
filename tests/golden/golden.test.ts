@@ -13,6 +13,7 @@ import { analyzeRepository } from '../../src/core/orchestrator.js';
 import { formatMarkdown } from '../../src/output/markdown.js';
 import { DEFAULT_CONFIG } from '../../src/core/types.js';
 import type { AnalysisConfig, ReportData, Grade } from '../../src/core/types.js';
+import { SKIP_NON_VITEST } from '../../src/test-utils.js';
 
 const PROJECT_ROOT = path.resolve('.');
 
@@ -20,7 +21,7 @@ const PROJECT_ROOT = path.resolve('.');
 let report: ReportData;
 let markdownOutput: string;
 
-describe('Golden output tests', { timeout: 120_000 }, () => {
+describe.skipIf(SKIP_NON_VITEST)('Golden output tests', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     const config: AnalysisConfig = {
       ...DEFAULT_CONFIG,
