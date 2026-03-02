@@ -1,0 +1,608 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aditya/codebase-analysis/schemas/report-v1.schema.json",
+  "title": "Codebase Analysis Report v1",
+  "description": "JSON output schema for the Codebase Analyzer CLI tool. Breaking changes require a version bump.",
+  "type": "object",
+  "required": ["meta", "sizing", "structure", "repoHealth", "complexity", "testAnalysis"],
+  "additionalProperties": true,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "description": "Report metadata",
+      "required": ["generatedAt", "analyzerVersion", "directory", "analysisCompleteness"],
+      "properties": {
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of report generation"
+        },
+        "analyzerVersion": {
+          "type": "string",
+          "description": "Semantic version of the analyzer (e.g., \"1.0.0\")"
+        },
+        "directory": {
+          "type": "string",
+          "description": "Absolute path to the analyzed repository"
+        },
+        "analysisCompleteness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of analysis modules that completed successfully (0-100)"
+        },
+        "grade": {
+          "type": "string",
+          "enum": ["A", "B", "C", "D", "F", "INCOMPLETE"],
+          "description": "Overall letter grade. INCOMPLETE if analysisCompleteness < 60%."
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Weighted score based on rubric.yaml"
+        },
+        "durationMs": {
+          "type": "number",
+          "description": "Total wall-clock milliseconds for the full analysis"
+        }
+      }
+    },
+
+    "sizing": {
+      "type": "object",
+      "description": "File and line count metrics",
+      "required": ["meta"],
+      "properties": {
+        "totalFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of tracked, non-binary files"
+        },
+        "totalLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of all lines across all files (including blank/comment)"
+        },
+        "totalCodeLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Lines excluding blank and comment lines"
+        },
+        "totalCommentLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Comment-only lines"
+        },
+        "totalBlankLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Blank lines"
+        },
+        "commentRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "commentLines / (codeLines + commentLines)"
+        },
+        "languages": {
+          "type": "array",
+          "description": "Per-language breakdown, ordered by codeLines descending",
+          "items": {
+            "type": "object",
+            "required": ["language", "fileCount", "codeLines", "percentage"],
+            "properties": {
+              "language": {
+                "type": "string",
+                "description": "Canonical language name (e.g., \"TypeScript\")"
+              },
+              "fileCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "codeLines": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "totalLines": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "percentage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Percentage of total code lines"
+              }
+            }
+          }
+        },
+        "godFiles": {
+          "type": "array",
+          "description": "Files exceeding 500 LOC threshold",
+          "items": {
+            "type": "object",
+            "required": ["path", "codeLines", "language"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Relative path from repo root"
+              },
+              "codeLines": {
+                "type": "integer",
+                "minimum": 501
+              },
+              "language": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "structure": {
+      "type": "object",
+      "description": "Directory structure metrics",
+      "required": ["meta"],
+      "properties": {
+        "treeString": {
+          "type": "string",
+          "description": "Human-readable indented directory tree"
+        },
+        "tree": {
+          "$ref": "#/definitions/folderNode",
+          "description": "Recursive folder/file tree as structured data"
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Deepest nesting level (root = 0)"
+        },
+        "topLevelFolders": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Names of directories at repo root"
+        },
+        "totalDirectories": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total tracked directories"
+        },
+        "avgFilesPerFolder": {
+          "type": "number",
+          "minimum": 0,
+          "description": "totalTrackedFiles / totalTrackedDirectories"
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "repoHealth": {
+      "type": "object",
+      "description": "Repository health checks",
+      "required": ["checks", "meta"],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "description": "Array of health check results",
+          "items": {
+            "type": "object",
+            "required": ["name", "present"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "readme",
+                  "license",
+                  "ci",
+                  "contributing",
+                  "gitignore",
+                  "editorconfig",
+                  "dockerfile",
+                  "securityPolicy",
+                  "codeOfConduct",
+                  "changelog"
+                ],
+                "description": "Check identifier"
+              },
+              "present": {
+                "type": "boolean",
+                "description": "Whether the check passed"
+              },
+              "path": {
+                "type": "string",
+                "description": "Relative path of matched file (only when present is true)"
+              },
+              "note": {
+                "type": "string",
+                "description": "Optional human-readable annotation"
+              }
+            }
+          }
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sum of weights for passing checks"
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "complexity": {
+      "type": "object",
+      "description": "McCabe cyclomatic complexity metrics",
+      "required": ["meta"],
+      "properties": {
+        "repoAvgComplexity": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Mean complexity across all functions. Null if no functions found."
+        },
+        "repoMaxComplexity": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Highest complexity of any single function. Null if no functions found."
+        },
+        "totalFunctions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of functions/methods analyzed"
+        },
+        "fileComplexities": {
+          "type": "array",
+          "description": "Per-file complexity summaries",
+          "items": {
+            "type": "object",
+            "required": ["path", "avgComplexity", "maxComplexity", "functionCount"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Relative path from repo root"
+              },
+              "avgComplexity": {
+                "type": "number",
+                "minimum": 0
+              },
+              "maxComplexity": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "functionCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "functions": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/functionComplexity" }
+              }
+            }
+          }
+        },
+        "hotspots": {
+          "type": "array",
+          "description": "Top 10 most complex functions",
+          "maxItems": 10,
+          "items": { "$ref": "#/definitions/functionComplexity" }
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "testAnalysis": {
+      "type": "object",
+      "description": "Test coverage and framework detection",
+      "required": ["meta"],
+      "properties": {
+        "testFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of detected test files"
+        },
+        "testLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total lines in test files"
+        },
+        "testCodeLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Code lines in test files"
+        },
+        "codeLines": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total code lines in non-test files"
+        },
+        "testCodeRatio": {
+          "type": "number",
+          "minimum": 0,
+          "description": "testCodeLines / (totalCodeLines - testCodeLines) * 100"
+        },
+        "testFrameworks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of detected test framework names"
+        },
+        "coverageConfigFound": {
+          "type": "boolean",
+          "description": "Whether coverage configuration was detected"
+        },
+        "testFileList": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Relative paths of all detected test files"
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "duplication": {
+      "type": "object",
+      "description": "Code duplication metrics from jscpd",
+      "required": ["meta"],
+      "properties": {
+        "duplicateLines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicatePercentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "totalClones": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["firstFile", "secondFile", "lines"],
+            "properties": {
+              "firstFile": { "type": "string" },
+              "firstStartLine": { "type": "integer" },
+              "firstEndLine": { "type": "integer" },
+              "secondFile": { "type": "string" },
+              "secondStartLine": { "type": "integer" },
+              "secondEndLine": { "type": "integer" },
+              "lines": { "type": "integer", "minimum": 1 },
+              "tokens": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "security": {
+      "type": "object",
+      "description": "Secret detection metrics from gitleaks",
+      "required": ["meta"],
+      "properties": {
+        "secretsFound": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "line", "ruleId"],
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "Relative path"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "ruleId": {
+                "type": "string",
+                "description": "Gitleaks rule identifier"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Secret findings. NEVER contains raw secret values."
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "git": {
+      "type": "object",
+      "description": "Git history metrics",
+      "required": ["meta"],
+      "properties": {
+        "totalCommits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contributors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "firstCommitDate": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "lastCommitDate": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "activeDays": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "topContributors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "email", "commits"],
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string", "format": "email" },
+              "commits": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "dependencies": {
+      "type": "object",
+      "description": "Dependency analysis metrics",
+      "required": ["meta"],
+      "properties": {
+        "totalDependencies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "directDependencies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "devDependencies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ecosystems": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "packageManager": {
+          "type": ["string", "null"]
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "scoring": {
+      "type": "object",
+      "description": "Scoring breakdown by category",
+      "properties": {
+        "totalScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "totalPossible": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Sum of weights for computed (non-skipped) categories"
+        },
+        "normalizedScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "totalScore / totalPossible * 100, normalized for partial data"
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "score": { "type": "number", "minimum": 0 },
+              "maxScore": { "type": "number", "minimum": 0 },
+              "metrics": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "score": { "type": "number", "minimum": 0 },
+                    "maxScore": { "type": "number", "minimum": 0 },
+                    "label": { "type": "string" },
+                    "value": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "definitions": {
+    "analyzerMeta": {
+      "type": "object",
+      "description": "Metadata for each analyzer section",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["computed", "skipped", "error"],
+          "description": "Whether this section was computed, skipped, or errored"
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Explanation for skipped/error status. Null when computed."
+        },
+        "durationMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Wall-clock milliseconds for this analysis pass"
+        }
+      }
+    },
+
+    "functionComplexity": {
+      "type": "object",
+      "description": "Complexity data for a single function",
+      "required": ["name", "filePath", "line", "complexity"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Function name, <anonymous>, or <arrow>"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "Relative path from repo root"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Starting line number (1-indexed)"
+        },
+        "complexity": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "McCabe cyclomatic complexity score"
+        }
+      }
+    },
+
+    "folderNode": {
+      "type": "object",
+      "description": "Recursive directory tree node",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Directory or file name"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["directory", "file"]
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of direct child files (directories only)"
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/folderNode" },
+          "description": "Child nodes (directories only)"
+        }
+      }
+    }
+  }
+}

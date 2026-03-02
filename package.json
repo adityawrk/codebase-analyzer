@@ -1,0 +1,32 @@
+{
+  "name": "codebase-analyzer",
+  "version": "0.1.0",
+  "description": "Self-hosted static analysis CLI for codebase reports",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "codebase-analyzer": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:golden": "vitest run tests/golden/",
+    "update-golden": "UPDATE_GOLDEN=1 vitest run tests/golden/"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "0.20.8",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "@vitest/coverage-v8": "^4.0.18",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
