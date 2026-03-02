@@ -1,6 +1,7 @@
 {
   "name": "codebase-analyzer",
   "version": "0.1.0",
+  "private": true,
   "description": "Self-hosted static analysis CLI that produces codebase analysis reports without LLM dependency. Orchestrates scc, jscpd, gitleaks, and tree-sitter AST parsing to compute static metrics with scored markdown/JSON output.",
   "type": "module",
   "main": "./dist/core/orchestrator.js",
