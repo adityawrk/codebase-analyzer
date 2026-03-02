@@ -151,6 +151,30 @@
             }
           }
         },
+        "largestFiles": {
+          "type": "array",
+          "description": "Top 15 files by total line count",
+          "maxItems": 15,
+          "items": {
+            "type": "object",
+            "required": ["path", "lines", "language"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Relative path from repo root"
+              },
+              "lines": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Total lines in the file"
+              },
+              "language": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
     },

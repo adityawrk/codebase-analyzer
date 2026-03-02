@@ -155,6 +155,8 @@ export interface SizingResult {
   totalCommentLines: number;
   languages: LanguageBreakdown[];
   godFiles: GodFile[];
+  /** Top 15 files by line count (all files, not just god files) */
+  largestFiles: GodFile[];
 }
 
 // -- Structure --
@@ -236,6 +238,13 @@ export interface ContributorInfo {
   commits: number;
 }
 
+export interface RecentCommit {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
 export interface GitAnalysisResult {
   meta: AnalyzerMeta;
   totalCommits: number;
@@ -250,6 +259,11 @@ export interface GitAnalysisResult {
     commitsPerWeek: number;
     commitsPerMonth: number;
   };
+  recentCommits: RecentCommit[];
+  avgMessageLength: number;
+  shortMessageCount: number;
+  commitsWithTests: number;
+  commitsWithTestsPercent: number;
 }
 
 // -- Dependencies --

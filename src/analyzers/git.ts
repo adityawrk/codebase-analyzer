@@ -9,6 +9,7 @@ import type {
   RepositoryIndex,
   GitAnalysisResult,
   ContributorInfo,
+  RecentCommit,
   AnalyzerMeta,
 } from '../core/types.js';
 import { execTool } from '../core/exec.js';
@@ -26,6 +27,15 @@ const CONVENTIONAL_COMMIT_RE =
 
 /** Number of recent commit subjects to sample for conventional commit %. */
 const CONVENTIONAL_SAMPLE_SIZE = 100;
+
+/** Number of recent commits to display in the report. */
+const RECENT_COMMITS_LIMIT = 15;
+
+/** Minimum commit message length — shorter is "very short". */
+const SHORT_MESSAGE_THRESHOLD = 10;
+
+/** Regex patterns for test file paths. */
+const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/)/i;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -158,6 +168,92 @@ function calculateBusFactor(contributors: ContributorInfo[]): number {
   return Math.max(significantContributors, 1);
 }
 
+/**
+ * Parse recent commits from `git log --format=<hash>|<subject>|<author>|<date>` output.
+ */
+function parseRecentCommits(stdout: string): RecentCommit[] {
+  const commits: RecentCommit[] = [];
+
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+
+    // Format: "hash|message|author|relative-date"
+    const parts = trimmed.split('|');
+    if (parts.length < 4) continue;
+
+    commits.push({
+      hash: parts[0]!.trim(),
+      message: parts[1]!.trim(),
+      author: parts[2]!.trim(),
+      date: parts.slice(3).join('|').trim(), // date may contain | in edge cases
+    });
+  }
+
+  return commits;
+}
+
+/**
+ * Calculate average first-line message length and count of very short messages.
+ */
+function calculateMessageQuality(subjects: string[]): {
+  avgLength: number;
+  shortCount: number;
+} {
+  if (subjects.length === 0) return { avgLength: 0, shortCount: 0 };
+
+  let totalLength = 0;
+  let shortCount = 0;
+
+  for (const subject of subjects) {
+    const len = subject.trim().length;
+    totalLength += len;
+    if (len < SHORT_MESSAGE_THRESHOLD) {
+      shortCount++;
+    }
+  }
+
+  return {
+    avgLength: Math.round(totalLength / subjects.length),
+    shortCount,
+  };
+}
+
+/**
+ * Parse `git log --format='>>>%H' --name-only` output into per-commit file lists,
+ * and count how many commits touch at least one test file.
+ *
+ * Each commit block starts with ">>><hash>" followed by changed file paths.
+ */
+function countCommitsWithTests(stdout: string): {
+  count: number;
+  total: number;
+} {
+  // Split on the ">>>" commit marker
+  const blocks = stdout.split('>>>');
+  let total = 0;
+  let withTests = 0;
+
+  for (const block of blocks) {
+    const lines = block
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    // First line is the commit hash; rest are file paths
+    if (lines.length < 2) continue;
+
+    total++;
+    // Skip lines[0] (the hash), check remaining file paths
+    const filePaths = lines.slice(1);
+    const hasTestFile = filePaths.some((line) => TEST_FILE_RE.test(line));
+    if (hasTestFile) {
+      withTests++;
+    }
+  }
+
+  return { count: withTests, total };
+}
+
 // ---------------------------------------------------------------------------
 // Skipped / error result factories
 // ---------------------------------------------------------------------------
@@ -174,6 +270,11 @@ function skippedResult(reason: string, durationMs: number): GitAnalysisResult {
     conventionalCommitPercent: 0,
     busFactor: 0,
     commitFrequency: { commitsPerWeek: 0, commitsPerMonth: 0 },
+    recentCommits: [],
+    avgMessageLength: 0,
+    shortMessageCount: 0,
+    commitsWithTests: 0,
+    commitsWithTestsPercent: 0,
   };
 }
 
@@ -189,6 +290,11 @@ function errorResult(reason: string, durationMs: number): GitAnalysisResult {
     conventionalCommitPercent: 0,
     busFactor: 0,
     commitFrequency: { commitsPerWeek: 0, commitsPerMonth: 0 },
+    recentCommits: [],
+    avgMessageLength: 0,
+    shortMessageCount: 0,
+    commitsWithTests: 0,
+    commitsWithTestsPercent: 0,
   };
 }
 
@@ -226,6 +332,9 @@ export async function analyzeGit(
     firstCommitResult,
     lastCommitResult,
     recentShortlogResult,
+    recentCommitsResult,
+    allSubjectsResult,
+    nameOnlyResult,
   ] = await Promise.all([
     // totalCommits
     execTool('git', ['rev-list', '--count', 'HEAD'], { cwd, timeout }),
@@ -250,6 +359,20 @@ export async function analyzeGit(
     execTool(
       'git',
       ['shortlog', '-sne', '--since=12 months ago', 'HEAD'],
+      { cwd, timeout },
+    ),
+    // recent commits: hash, subject, author name, relative date
+    execTool(
+      'git',
+      ['log', '--format=%h|%s|%an|%ar', '-n', String(RECENT_COMMITS_LIMIT)],
+      { cwd, timeout },
+    ),
+    // all commit subjects for message quality metrics
+    execTool('git', ['log', '--format=%s'], { cwd, timeout }),
+    // per-commit file lists for commits-with-tests %
+    execTool(
+      'git',
+      ['log', '--format=>>>%H', '--name-only'],
       { cwd, timeout },
     ),
   ]);
@@ -303,6 +426,31 @@ export async function analyzeGit(
   const recentContributors = parseShortlog(recentShortlogResult.stdout);
   const busFactor = calculateBusFactor(recentContributors);
 
+  // Recent commits
+  const recentCommits =
+    recentCommitsResult.exitCode === 0
+      ? parseRecentCommits(recentCommitsResult.stdout)
+      : [];
+
+  // Commit message quality from all subjects
+  const allSubjects =
+    allSubjectsResult.exitCode === 0
+      ? allSubjectsResult.stdout
+          .split('\n')
+          .filter((l) => l.trim().length > 0)
+      : subjects; // fallback to the conventional-sample subjects
+  const messageQuality = calculateMessageQuality(allSubjects);
+
+  // Commits that include tests
+  const testsStats =
+    nameOnlyResult.exitCode === 0
+      ? countCommitsWithTests(nameOnlyResult.stdout)
+      : { count: 0, total: 0 };
+  const commitsWithTestsPercent =
+    testsStats.total > 0
+      ? Math.round((testsStats.count / testsStats.total) * 10000) / 100
+      : 0;
+
   const elapsed = performance.now() - start;
 
   const meta: AnalyzerMeta = {
@@ -321,5 +469,10 @@ export async function analyzeGit(
     conventionalCommitPercent,
     busFactor,
     commitFrequency,
+    recentCommits,
+    avgMessageLength: messageQuality.avgLength,
+    shortMessageCount: messageQuality.shortCount,
+    commitsWithTests: testsStats.count,
+    commitsWithTestsPercent,
   };
 }
