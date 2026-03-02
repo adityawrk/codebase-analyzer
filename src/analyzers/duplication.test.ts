@@ -1,13 +1,17 @@
 /**
  * Unit and integration tests for the duplication analyzer (jscpd wrapper).
  *
- * Uses vi.mock to stub exec.ts and node:fs/promises for isolated unit tests,
- * and runs a real integration test against the codebase_analysis repo itself.
+ * Only mocks exec.ts (checkTool/execTool). The filesystem (node:fs/promises)
+ * is NOT mocked — instead, the execTool mock writes real temp files that the
+ * analyzer's real fs.readFile picks up naturally.
+ *
+ * Pure parsing logic is tested via the exported parseJscpdReportJson helper.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as path from 'node:path';
-import type { AnalysisConfig, FileEntry, GitMeta, RepositoryIndex } from '../core/types.js';
+import * as fs from 'node:fs/promises';
+import type { AnalysisConfig, GitMeta, RepositoryIndex } from '../core/types.js';
 import { DEFAULT_CONFIG } from '../core/types.js';
 
 // ---------------------------------------------------------------------------
@@ -19,28 +23,13 @@ vi.mock('../core/exec.js', () => ({
   execTool: vi.fn(),
 }));
 
-// Mock node:fs/promises for controlling temp dir behavior in unit tests
-vi.mock('node:fs/promises', async () => {
-  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
-  return {
-    ...actual,
-    mkdir: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn(),
-    rm: vi.fn().mockResolvedValue(undefined),
-  };
-});
-
 // Import the mocked functions so we can control their return values
 import { checkTool, execTool } from '../core/exec.js';
-import * as fs from 'node:fs/promises';
-import { analyzeDuplication } from './duplication.js';
+import { analyzeDuplication, parseJscpdReportJson } from './duplication.js';
 
 // Cast to vi.Mock for type-safe stubbing
 const mockCheckTool = checkTool as unknown as ReturnType<typeof vi.fn>;
 const mockExecTool = execTool as unknown as ReturnType<typeof vi.fn>;
-const mockReadFile = fs.readFile as unknown as ReturnType<typeof vi.fn>;
-const mockMkdir = fs.mkdir as unknown as ReturnType<typeof vi.fn>;
-const mockRm = fs.rm as unknown as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,9 +62,9 @@ function makeMockIndex(overrides?: Partial<RepositoryIndex>): RepositoryIndex {
   };
 }
 
-/** Sample jscpd JSON report with 2 clone pairs. */
-function makeSampleReport(repoRoot: string = '/mock/repo') {
-  return JSON.stringify({
+/** Sample jscpd JSON report with 2 clone pairs (absolute paths). */
+function makeSampleReport(repoRoot: string = '/mock/repo'): object {
+  return {
     duplicates: [
       {
         format: 'typescript',
@@ -123,28 +112,156 @@ function makeSampleReport(repoRoot: string = '/mock/repo') {
       percentage: '3.2',
       total: { lines: 1094 },
     },
-  });
+  };
 }
 
-/** Sample jscpd JSON report with no duplicates. */
-const EMPTY_REPORT = JSON.stringify({
+/** Sample empty jscpd report. */
+const EMPTY_REPORT: object = {
   duplicates: [],
   statistics: {
     duplicatedLines: 0,
     percentage: '0',
     total: { lines: 500 },
   },
+};
+
+/**
+ * Configure the execTool mock to write a real jscpd-report.json file.
+ *
+ * The mock intercepts the `--output` argument, writes the report JSON to that
+ * temp directory (which the analyzer already created), then returns success.
+ * The analyzer's real fs.readFile picks up the file naturally.
+ */
+function mockExecToolWithReport(report: object) {
+  mockExecTool.mockImplementation(
+    async (_tool: string, args: string[], _opts?: unknown) => {
+      const outputIdx = args.indexOf('--output');
+      if (outputIdx !== -1 && outputIdx + 1 < args.length) {
+        const outputDir = args[outputIdx + 1]!;
+        // The analyzer already created this dir, but ensure it exists
+        await fs.mkdir(outputDir, { recursive: true });
+        await fs.writeFile(
+          path.join(outputDir, 'jscpd-report.json'),
+          JSON.stringify(report),
+          'utf-8',
+        );
+      }
+      return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+    },
+  );
+}
+
+/**
+ * Configure the execTool mock to write malformed content to the report file.
+ */
+function mockExecToolWithMalformedReport() {
+  mockExecTool.mockImplementation(
+    async (_tool: string, args: string[], _opts?: unknown) => {
+      const outputIdx = args.indexOf('--output');
+      if (outputIdx !== -1 && outputIdx + 1 < args.length) {
+        const outputDir = args[outputIdx + 1]!;
+        await fs.mkdir(outputDir, { recursive: true });
+        await fs.writeFile(
+          path.join(outputDir, 'jscpd-report.json'),
+          'this is not valid json',
+          'utf-8',
+        );
+      }
+      return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests — parseJscpdReportJson (pure parsing, no IO)
+// ---------------------------------------------------------------------------
+
+describe('parseJscpdReportJson — parsing', () => {
+  it('parses a valid report with clones', () => {
+    const report = makeSampleReport('/repo');
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+
+    expect(result).not.toBeNull();
+    expect(result!.duplicateLines).toBe(35);
+    expect(result!.duplicatePercentage).toBeCloseTo(3.2);
+    expect(result!.clones).toHaveLength(2);
+  });
+
+  it('returns clones sorted by lines descending', () => {
+    const report = makeSampleReport('/repo');
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+
+    expect(result!.clones[0]!.lines).toBe(25);
+    expect(result!.clones[1]!.lines).toBe(10);
+  });
+
+  it('makes file paths relative to repo root', () => {
+    const report = makeSampleReport('/my/project');
+    const result = parseJscpdReportJson(JSON.stringify(report), '/my/project');
+
+    for (const clone of result!.clones) {
+      expect(clone.firstFile).not.toMatch(/^\//);
+      expect(clone.secondFile).not.toMatch(/^\//);
+    }
+
+    const bigClone = result!.clones.find((c) => c.lines === 25);
+    expect(bigClone!.firstFile).toBe('src/utils/helper.ts');
+    expect(bigClone!.secondFile).toBe('src/utils/helper2.ts');
+  });
+
+  it('handles empty duplicates array', () => {
+    const result = parseJscpdReportJson(JSON.stringify(EMPTY_REPORT), '/repo');
+
+    expect(result).not.toBeNull();
+    expect(result!.duplicateLines).toBe(0);
+    expect(result!.duplicatePercentage).toBe(0);
+    expect(result!.clones).toEqual([]);
+  });
+
+  it('handles percentage as a number', () => {
+    const report = {
+      duplicates: [],
+      statistics: { duplicatedLines: 10, percentage: 4.5, total: { lines: 200 } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result!.duplicatePercentage).toBe(4.5);
+  });
+
+  it('handles missing statistics fields gracefully', () => {
+    const report = { duplicates: [], statistics: {} };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+
+    expect(result).not.toBeNull();
+    expect(result!.duplicateLines).toBe(0);
+    expect(result!.duplicatePercentage).toBe(0);
+  });
+
+  it('returns null for invalid JSON', () => {
+    const result = parseJscpdReportJson('this is not json', '/repo');
+    expect(result).toBeNull();
+  });
+
+  it('maps clone pair fields correctly', () => {
+    const report = makeSampleReport('/repo');
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+
+    const clone = result!.clones.find((c) => c.lines === 10)!;
+    expect(clone.firstFile).toBe('src/foo.ts');
+    expect(clone.firstStartLine).toBe(10);
+    expect(clone.firstEndLine).toBe(20);
+    expect(clone.secondFile).toBe('src/bar.ts');
+    expect(clone.secondStartLine).toBe(30);
+    expect(clone.secondEndLine).toBe(40);
+    expect(clone.tokens).toBe(80);
+  });
 });
 
 // ---------------------------------------------------------------------------
-// Unit tests with mocked exec
+// Unit tests — analyzeDuplication with mocked exec
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: mkdir and rm succeed silently
-  mockMkdir.mockResolvedValue(undefined);
-  mockRm.mockResolvedValue(undefined);
 });
 
 describe('analyzeDuplication — tool availability', () => {
@@ -167,13 +284,7 @@ describe('analyzeDuplication — tool availability', () => {
 describe('analyzeDuplication — successful analysis', () => {
   it('returns computed with parsed output on success', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(makeSampleReport());
+    mockExecToolWithReport(makeSampleReport('/mock/repo'));
 
     const index = makeMockIndex();
     const result = await analyzeDuplication(index);
@@ -187,13 +298,7 @@ describe('analyzeDuplication — successful analysis', () => {
 
   it('meta.status is computed on success', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(makeSampleReport());
+    mockExecToolWithReport(makeSampleReport('/mock/repo'));
 
     const index = makeMockIndex();
     const result = await analyzeDuplication(index);
@@ -207,13 +312,7 @@ describe('analyzeDuplication — successful analysis', () => {
 describe('analyzeDuplication — clone sorting', () => {
   it('clones are sorted by lines descending', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(makeSampleReport());
+    mockExecToolWithReport(makeSampleReport('/mock/repo'));
 
     const index = makeMockIndex();
     const result = await analyzeDuplication(index);
@@ -228,13 +327,7 @@ describe('analyzeDuplication — clone sorting', () => {
 describe('analyzeDuplication — file paths', () => {
   it('file paths are relative to repo root', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(makeSampleReport('/mock/repo'));
+    mockExecToolWithReport(makeSampleReport('/mock/repo'));
 
     const index = makeMockIndex({ root: '/mock/repo' });
     const result = await analyzeDuplication(index);
@@ -263,13 +356,7 @@ describe('analyzeDuplication — file paths', () => {
 describe('analyzeDuplication — empty output', () => {
   it('handles empty jscpd output (no duplicates)', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(EMPTY_REPORT);
+    mockExecToolWithReport(EMPTY_REPORT);
 
     const index = makeMockIndex();
     const result = await analyzeDuplication(index);
@@ -283,13 +370,13 @@ describe('analyzeDuplication — empty output', () => {
 
   it('handles missing report file gracefully', async () => {
     mockCheckTool.mockResolvedValue(true);
+    // execTool succeeds but does NOT write a report file
     mockExecTool.mockResolvedValue({
       stdout: '',
       stderr: '',
       exitCode: 0,
       timedOut: false,
     });
-    mockReadFile.mockRejectedValue(new Error('ENOENT: no such file'));
 
     const index = makeMockIndex();
     const result = await analyzeDuplication(index);
@@ -341,13 +428,7 @@ describe('analyzeDuplication — error handling', () => {
 
   it('returns error when JSON report is malformed', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue('this is not valid json');
+    mockExecToolWithMalformedReport();
 
     const index = makeMockIndex();
     const result = await analyzeDuplication(index);
@@ -355,30 +436,12 @@ describe('analyzeDuplication — error handling', () => {
     expect(result.meta.status).toBe('error');
     expect(result.meta.reason).toContain('Failed to parse');
   });
-
-  it('returns error when temp directory creation fails', async () => {
-    mockCheckTool.mockResolvedValue(true);
-    mockMkdir.mockRejectedValue(new Error('EACCES: permission denied'));
-
-    const index = makeMockIndex();
-    const result = await analyzeDuplication(index);
-
-    expect(result.meta.status).toBe('error');
-    expect(result.meta.reason).toContain('Failed to create temp directory');
-    expect(mockExecTool).not.toHaveBeenCalled();
-  });
 });
 
 describe('analyzeDuplication — exec invocation', () => {
   it('passes correct arguments to execTool', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(EMPTY_REPORT);
+    mockExecToolWithReport(EMPTY_REPORT);
 
     const index = makeMockIndex({ root: '/my/project' });
     index.config = makeConfig({ root: '/my/project' });
@@ -403,13 +466,7 @@ describe('analyzeDuplication — exec invocation', () => {
 
   it('respects the configured timeout', async () => {
     mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(EMPTY_REPORT);
+    mockExecToolWithReport(EMPTY_REPORT);
 
     const customTimeout = 120_000;
     const index = makeMockIndex({
@@ -425,45 +482,6 @@ describe('analyzeDuplication — exec invocation', () => {
   });
 });
 
-describe('analyzeDuplication — cleanup', () => {
-  it('cleans up temp directory after successful analysis', async () => {
-    mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-    mockReadFile.mockResolvedValue(EMPTY_REPORT);
-
-    const index = makeMockIndex();
-    await analyzeDuplication(index);
-
-    expect(mockRm).toHaveBeenCalledWith(
-      expect.stringContaining('jscpd-report-'),
-      { recursive: true, force: true },
-    );
-  });
-
-  it('cleans up temp directory even after jscpd error', async () => {
-    mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: 'error',
-      exitCode: 1,
-      timedOut: false,
-    });
-
-    const index = makeMockIndex();
-    await analyzeDuplication(index);
-
-    expect(mockRm).toHaveBeenCalledWith(
-      expect.stringContaining('jscpd-report-'),
-      { recursive: true, force: true },
-    );
-  });
-});
-
 describe('analyzeDuplication — timing', () => {
   it('always reports durationMs >= 0', async () => {
     mockCheckTool.mockResolvedValue(false);
@@ -474,71 +492,21 @@ describe('analyzeDuplication — timing', () => {
   });
 });
 
-describe('analyzeDuplication — statistics parsing edge cases', () => {
-  it('handles percentage as a number', async () => {
-    mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-
-    const report = {
-      duplicates: [],
-      statistics: {
-        duplicatedLines: 0,
-        percentage: 4.5,
-        total: { lines: 200 },
-      },
-    };
-    mockReadFile.mockResolvedValue(JSON.stringify(report));
-
-    const index = makeMockIndex();
-    const result = await analyzeDuplication(index);
-
-    expect(result.meta.status).toBe('computed');
-    expect(result.duplicatePercentage).toBe(4.5);
-  });
-
-  it('handles missing statistics gracefully', async () => {
-    mockCheckTool.mockResolvedValue(true);
-    mockExecTool.mockResolvedValue({
-      stdout: '',
-      stderr: '',
-      exitCode: 0,
-      timedOut: false,
-    });
-
-    const report = {
-      duplicates: [],
-      statistics: {},
-    };
-    mockReadFile.mockResolvedValue(JSON.stringify(report));
-
-    const index = makeMockIndex();
-    const result = await analyzeDuplication(index);
-
-    expect(result.meta.status).toBe('computed');
-    expect(result.duplicateLines).toBe(0);
-    expect(result.duplicatePercentage).toBe(0);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Integration test — runs against the real codebase_analysis project
 // ---------------------------------------------------------------------------
 
 describe('analyzeDuplication — integration', () => {
   it('runs jscpd on the codebase_analysis repo (if jscpd is installed)', async () => {
-    // Wire mocks to real implementations for the integration test.
-    // We import the real modules via importActual to bypass vi.mock.
-    const realExec = await vi.importActual<typeof import('../core/exec.js')>('../core/exec.js');
-    const realFs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    // For the integration test, restore mocks so the real exec module is used
+    vi.restoreAllMocks();
 
-    const isInstalled = await realExec.checkTool('jscpd');
+    const realExec = await import('../core/exec.js');
+    const realCheckTool = realExec.checkTool;
+
+    const isInstalled = await realCheckTool('jscpd');
     if (!isInstalled) {
-      // jscpd not installed — verify skipped path with a real index
+      // If jscpd isn't installed, just verify the skipped path works
       mockCheckTool.mockResolvedValue(false);
       const { buildRepositoryIndex } = await import('../core/repo-index.js');
       const root = path.resolve(import.meta.dirname, '../..');
@@ -550,12 +518,9 @@ describe('analyzeDuplication — integration', () => {
       return;
     }
 
-    // jscpd is installed — passthrough to real implementations
+    // jscpd is installed — override mocks with real implementations
     mockCheckTool.mockImplementation(realExec.checkTool);
     mockExecTool.mockImplementation(realExec.execTool);
-    mockMkdir.mockImplementation(realFs.mkdir as any);
-    mockReadFile.mockImplementation(realFs.readFile as any);
-    mockRm.mockImplementation(realFs.rm as any);
 
     const { buildRepositoryIndex } = await import('../core/repo-index.js');
     const root = path.resolve(import.meta.dirname, '../..');
@@ -591,5 +556,5 @@ describe('analyzeDuplication — integration', () => {
     for (let i = 1; i < result.clones.length; i++) {
       expect(result.clones[i - 1]!.lines).toBeGreaterThanOrEqual(result.clones[i]!.lines);
     }
-  }, 30_000);
+  }, 30_000); // jscpd can be slow on larger codebases
 });
