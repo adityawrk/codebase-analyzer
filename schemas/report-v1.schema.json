@@ -4,7 +4,7 @@
   "title": "Codebase Analysis Report v1",
   "description": "JSON output schema for the Codebase Analyzer CLI tool. Breaking changes require a version bump.",
   "type": "object",
-  "required": ["meta", "sizing", "structure", "repoHealth", "complexity", "testAnalysis"],
+  "required": ["meta", "sizing", "structure", "repoHealth", "complexity", "testAnalysis", "git", "dependencies", "security", "techStack", "envVars", "duplication", "architecture"],
   "additionalProperties": true,
   "properties": {
     "meta": {
@@ -478,6 +478,119 @@
         },
         "packageManager": {
           "type": ["string", "null"]
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "techStack": {
+      "type": "object",
+      "description": "Detected technology stack",
+      "required": ["meta"],
+      "properties": {
+        "stack": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "category", "source"],
+            "properties": {
+              "name": { "type": "string" },
+              "category": {
+                "type": "string",
+                "enum": ["framework", "build-tool", "linter", "formatter", "test-runner", "deployment", "database", "service", "language-tool", "other"]
+              },
+              "source": {
+                "type": "string",
+                "description": "How this tool was detected (e.g., package.json, file presence)"
+              }
+            }
+          }
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "envVars": {
+      "type": "object",
+      "description": "Environment variable detection",
+      "required": ["meta"],
+      "properties": {
+        "totalVars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "file", "line"],
+            "properties": {
+              "name": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": "integer", "minimum": 1 },
+              "prefix": { "type": "string" }
+            }
+          }
+        },
+        "byPrefix": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "description": "Count of variables grouped by prefix"
+        },
+        "meta": { "$ref": "#/definitions/analyzerMeta" }
+      }
+    },
+
+    "architecture": {
+      "type": "object",
+      "description": "Import graph and module architecture metrics",
+      "required": ["meta"],
+      "properties": {
+        "totalImports": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uniqueModules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "importGraph": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" }
+            }
+          }
+        },
+        "circularDependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["cycle"],
+            "properties": {
+              "cycle": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2
+              }
+            }
+          }
+        },
+        "moduleCohesion": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["module", "intraImports", "totalImports", "cohesionRatio"],
+            "properties": {
+              "module": { "type": "string" },
+              "intraImports": { "type": "integer", "minimum": 0 },
+              "totalImports": { "type": "integer", "minimum": 0 },
+              "cohesionRatio": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
         },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }

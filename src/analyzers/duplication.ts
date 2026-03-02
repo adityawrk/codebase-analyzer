@@ -81,7 +81,7 @@ async function cleanupTempDir(dir: string): Promise<void> {
  * Parse jscpd JSON report string into ClonePair[] and statistics.
  *
  * Exported for unit testing. Takes raw JSON string and repo root.
- * Returns null if the JSON is invalid.
+ * Returns null if the JSON is invalid or has an unexpected structure.
  */
 export function parseJscpdReportJson(
   json: string,
@@ -97,7 +97,24 @@ export function parseJscpdReportJson(
 }
 
 /**
+ * Coerce a value to a finite number, returning `fallback` for NaN / Infinity / non-numbers.
+ */
+function safeNumber(value: unknown, fallback: number = 0): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+/**
  * Parse jscpd JSON report into ClonePair[] and statistics.
+ *
+ * Includes runtime guards against unexpected report structure:
+ * - Missing or non-object `statistics` / `duplicates` fields
+ * - Non-numeric or NaN values coerced to 0
+ * - Malformed clone entries silently skipped
  *
  * File paths are made relative to the repo root.
  * Clones are sorted by lines descending (largest clones first).
@@ -105,30 +122,52 @@ export function parseJscpdReportJson(
 function parseJscpdReport(
   report: JscpdReport,
   repoRoot: string,
-): { clones: ClonePair[]; duplicateLines: number; duplicatePercentage: number } {
-  const duplicateLines = report.statistics?.duplicatedLines ?? 0;
-  const duplicatePercentage =
-    typeof report.statistics?.percentage === 'string'
-      ? parseFloat(report.statistics.percentage)
-      : typeof report.statistics?.percentage === 'number'
-        ? report.statistics.percentage
-        : 0;
+): { clones: ClonePair[]; duplicateLines: number; duplicatePercentage: number } | null {
+  // Guard: report must be a non-null, non-array object
+  if (report == null || typeof report !== 'object' || Array.isArray(report)) {
+    return null;
+  }
 
-  const clones: ClonePair[] = (report.duplicates ?? []).map((dup) => {
+  const stats = report.statistics;
+  const duplicateLines = safeNumber(stats?.duplicatedLines, 0);
+  const duplicatePercentage = safeNumber(stats?.percentage, 0);
+
+  // Guard: duplicates must be an array (or absent → empty)
+  const rawDuplicates = Array.isArray(report.duplicates) ? report.duplicates : [];
+
+  const clones: ClonePair[] = [];
+  for (const dup of rawDuplicates) {
+    // Skip malformed entries — require both file refs with string name + numeric start/end
+    if (
+      typeof dup?.firstFile?.name !== 'string' ||
+      typeof dup?.secondFile?.name !== 'string' ||
+      typeof dup.firstFile.start !== 'number' ||
+      typeof dup.firstFile.end !== 'number' ||
+      typeof dup.secondFile.start !== 'number' ||
+      typeof dup.secondFile.end !== 'number'
+    ) {
+      continue;
+    }
+
+    // Skip clones with invalid lines/tokens (schema requires >= 1)
+    const lines = safeNumber(dup.lines, 0);
+    const tokens = safeNumber(dup.tokens, 0);
+    if (lines < 1 || tokens < 1) continue;
+
     const firstFilePath = makeRelative(dup.firstFile.name, repoRoot);
     const secondFilePath = makeRelative(dup.secondFile.name, repoRoot);
 
-    return {
+    clones.push({
       firstFile: firstFilePath,
       firstStartLine: dup.firstFile.start,
       firstEndLine: dup.firstFile.end,
       secondFile: secondFilePath,
       secondStartLine: dup.secondFile.start,
       secondEndLine: dup.secondFile.end,
-      lines: dup.lines,
-      tokens: dup.tokens,
-    };
-  });
+      lines,
+      tokens,
+    });
+  }
 
   // Sort by lines descending — largest clones first
   clones.sort((a, b) => b.lines - a.lines);
@@ -200,16 +239,34 @@ export async function analyzeDuplication(
   }
 
   try {
+    // Write the indexed non-binary file list to a temp config file.
+    // jscpd does not support a --files-list option, but its config file
+    // accepts a `path` array. By pointing each entry at the individual files
+    // from index.files, we honour file-policy without importing it directly.
+    // We write a .jscpd.json config with the file list to the temp dir.
+    const nonBinaryFiles = index.files.filter((f) => !f.isBinary);
+    const configPath = path.join(tempDir, '.jscpd.json');
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        path: nonBinaryFiles.map((f) => path.join(index.root, f.path)),
+      }),
+      'utf-8',
+    );
+
     // Run jscpd
+    // NOTE: --format is intentionally omitted. It controls which *language
+    // formats* jscpd analyzes (e.g. "php,javascript"). Passing --format json
+    // would restrict analysis to JSON files only. --reporters json controls
+    // the *output* reporter format.
     const result = await execTool(
       'jscpd',
       [
-        '--format', 'json',
         '--reporters', 'json',
         '--output', tempDir,
         '--min-lines', '5',
         '--min-tokens', '50',
-        index.root,
+        '--config', configPath,
       ],
       { timeout: index.config.timeout, cwd: index.root },
     );
@@ -265,10 +322,8 @@ export async function analyzeDuplication(
     }
 
     // Parse the report
-    let report: JscpdReport;
-    try {
-      report = JSON.parse(reportJson) as JscpdReport;
-    } catch {
+    const parsed = parseJscpdReportJson(reportJson, index.root);
+    if (parsed == null) {
       return {
         meta: {
           status: 'error',
@@ -282,10 +337,7 @@ export async function analyzeDuplication(
       };
     }
 
-    const { clones, duplicateLines, duplicatePercentage } = parseJscpdReport(
-      report,
-      index.root,
-    );
+    const { clones, duplicateLines, duplicatePercentage } = parsed;
 
     return {
       meta: {

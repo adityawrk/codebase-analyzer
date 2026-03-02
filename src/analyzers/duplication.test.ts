@@ -241,6 +241,112 @@ describe('parseJscpdReportJson — parsing', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null for a JSON array instead of object', () => {
+    const result = parseJscpdReportJson('[]', '/repo');
+    expect(result).toBeNull();
+  });
+
+  it('returns null for a JSON primitive', () => {
+    const result = parseJscpdReportJson('"hello"', '/repo');
+    expect(result).toBeNull();
+  });
+
+  it('returns null for JSON null', () => {
+    const result = parseJscpdReportJson('null', '/repo');
+    expect(result).toBeNull();
+  });
+
+  it('handles missing duplicates field gracefully', () => {
+    const report = { statistics: { duplicatedLines: 5, percentage: '1.0', total: { lines: 500 } } };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.clones).toEqual([]);
+    expect(result!.duplicateLines).toBe(5);
+  });
+
+  it('handles duplicates as non-array gracefully', () => {
+    const report = { duplicates: 'not-an-array', statistics: { duplicatedLines: 0, percentage: '0', total: { lines: 0 } } };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.clones).toEqual([]);
+  });
+
+  it('skips malformed clone entries with missing firstFile', () => {
+    const report = {
+      duplicates: [
+        { format: 'typescript', lines: 10, tokens: 50, secondFile: { name: 'b.ts', start: 1, end: 10 } },
+      ],
+      statistics: { duplicatedLines: 10, percentage: '1.0', total: { lines: 1000 } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.clones).toEqual([]);
+  });
+
+  it('skips clone entries where start/end are not numbers', () => {
+    const report = {
+      duplicates: [
+        {
+          format: 'typescript',
+          lines: 10,
+          tokens: 50,
+          firstFile: { name: 'a.ts', start: 'bad', end: 10 },
+          secondFile: { name: 'b.ts', start: 1, end: 10 },
+        },
+      ],
+      statistics: { duplicatedLines: 10, percentage: '1.0', total: { lines: 1000 } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.clones).toEqual([]);
+  });
+
+  it('coerces NaN percentage to 0', () => {
+    const report = {
+      duplicates: [],
+      statistics: { duplicatedLines: 0, percentage: 'not-a-number', total: { lines: 100 } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.duplicatePercentage).toBe(0);
+  });
+
+  it('coerces Infinity percentage to 0', () => {
+    const report = {
+      duplicates: [],
+      statistics: { duplicatedLines: 0, percentage: Infinity, total: { lines: 100 } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.duplicatePercentage).toBe(0);
+  });
+
+  it('skips clone entries with non-numeric lines/tokens (schema requires >= 1)', () => {
+    const report = {
+      duplicates: [
+        {
+          format: 'typescript',
+          lines: 'bad',
+          tokens: null,
+          firstFile: { name: '/repo/a.ts', start: 1, end: 10 },
+          secondFile: { name: '/repo/b.ts', start: 1, end: 10 },
+        },
+      ],
+      statistics: { duplicatedLines: 10, percentage: '1.0', total: { lines: 1000 } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.clones).toHaveLength(0);
+  });
+
+  it('handles completely missing statistics gracefully', () => {
+    const report = { duplicates: [] };
+    const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
+    expect(result).not.toBeNull();
+    expect(result!.duplicateLines).toBe(0);
+    expect(result!.duplicatePercentage).toBe(0);
+  });
+
   it('maps clone pair fields correctly', () => {
     const report = makeSampleReport('/repo');
     const result = parseJscpdReportJson(JSON.stringify(report), '/repo');
@@ -439,7 +545,7 @@ describe('analyzeDuplication — error handling', () => {
 });
 
 describe('analyzeDuplication — exec invocation', () => {
-  it('passes correct arguments to execTool', async () => {
+  it('passes correct arguments to execTool (no --format, uses --config)', async () => {
     mockCheckTool.mockResolvedValue(true);
     mockExecToolWithReport(EMPTY_REPORT);
 
@@ -450,18 +556,87 @@ describe('analyzeDuplication — exec invocation', () => {
     expect(mockExecTool).toHaveBeenCalledWith(
       'jscpd',
       [
-        '--format', 'json',
         '--reporters', 'json',
         '--output', expect.stringContaining('jscpd-report-'),
         '--min-lines', '5',
         '--min-tokens', '50',
-        '/my/project',
+        '--config', expect.stringContaining('.jscpd.json'),
       ],
       expect.objectContaining({
         timeout: expect.any(Number),
         cwd: '/my/project',
       }),
     );
+
+    // Verify --format is NOT in the args (it would restrict language detection)
+    const args = mockExecTool.mock.calls[0]![1] as string[];
+    expect(args).not.toContain('--format');
+  });
+
+  it('does not pass index.root as a positional argument', async () => {
+    mockCheckTool.mockResolvedValue(true);
+    mockExecToolWithReport(EMPTY_REPORT);
+
+    const index = makeMockIndex({ root: '/my/project' });
+    index.config = makeConfig({ root: '/my/project' });
+    await analyzeDuplication(index);
+
+    const args = mockExecTool.mock.calls[0]![1] as string[];
+    // The last arg should be the config path, not index.root
+    expect(args[args.length - 1]).toContain('.jscpd.json');
+    expect(args).not.toContain('/my/project');
+  });
+
+  it('writes a .jscpd.json config with non-binary file paths from index', async () => {
+    mockCheckTool.mockResolvedValue(true);
+
+    // Track what config file was written
+    let writtenConfigPath: string | null = null;
+    let writtenConfigContent: string | null = null;
+
+    mockExecTool.mockImplementation(
+      async (_tool: string, args: string[], _opts?: unknown) => {
+        const configIdx = args.indexOf('--config');
+        if (configIdx !== -1 && configIdx + 1 < args.length) {
+          writtenConfigPath = args[configIdx + 1]!;
+          writtenConfigContent = await fs.readFile(writtenConfigPath, 'utf-8');
+        }
+        // Also write the report file
+        const outputIdx = args.indexOf('--output');
+        if (outputIdx !== -1 && outputIdx + 1 < args.length) {
+          const outputDir = args[outputIdx + 1]!;
+          await fs.mkdir(outputDir, { recursive: true });
+          await fs.writeFile(
+            path.join(outputDir, 'jscpd-report.json'),
+            JSON.stringify(EMPTY_REPORT),
+            'utf-8',
+          );
+        }
+        return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+      },
+    );
+
+    const index = makeMockIndex({
+      root: '/my/project',
+      files: [
+        { path: 'src/foo.ts', language: 'TypeScript', extension: '.ts', size: 100, isTest: false, isBinary: false },
+        { path: 'src/bar.ts', language: 'TypeScript', extension: '.ts', size: 200, isTest: false, isBinary: false },
+        { path: 'assets/logo.png', language: 'Binary', extension: '.png', size: 5000, isTest: false, isBinary: true },
+      ],
+    });
+    index.config = makeConfig({ root: '/my/project' });
+    await analyzeDuplication(index);
+
+    expect(writtenConfigPath).not.toBeNull();
+    expect(writtenConfigContent).not.toBeNull();
+
+    const config = JSON.parse(writtenConfigContent!);
+    // Should include non-binary files only
+    expect(config.path).toHaveLength(2);
+    expect(config.path).toContain('/my/project/src/foo.ts');
+    expect(config.path).toContain('/my/project/src/bar.ts');
+    // Binary file should be excluded
+    expect(config.path).not.toContain('/my/project/assets/logo.png');
   });
 
   it('respects the configured timeout', async () => {

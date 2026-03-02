@@ -2,8 +2,13 @@
  * Cargo ecosystem adapter — parses Cargo.toml manifests into DependencyEntry[].
  *
  * Uses a simple line-based parser (no TOML library dependency) to extract
- * dependencies from [dependencies], [dev-dependencies], and [build-dependencies]
- * sections. Malformed or missing files are handled gracefully (empty array returned).
+ * dependencies from:
+ *   - [dependencies], [dev-dependencies], [build-dependencies]
+ *   - [workspace.dependencies]
+ *   - [target.'...'.dependencies], [target.'...'.dev-dependencies],
+ *     [target.'...'.build-dependencies]
+ *
+ * Malformed or missing files are handled gracefully (empty array returned).
  */
 
 import * as fs from 'node:fs/promises';
@@ -15,7 +20,42 @@ const SECTION_TYPE_MAP: Record<string, DependencyEntry['type']> = {
   '[dependencies]': 'direct',
   '[dev-dependencies]': 'dev',
   '[build-dependencies]': 'dev',
+  '[workspace.dependencies]': 'direct',
 };
+
+/**
+ * Regex to match target-specific dependency sections like:
+ *   [target.'cfg(...)'.dependencies]
+ *   [target.'cfg(...)'.dev-dependencies]
+ *   [target.'cfg(...)'.build-dependencies]
+ *   [target.x86_64-unknown-linux-gnu.dependencies]
+ *
+ * Uses greedy `.+` with backtracking to handle dots inside quoted cfg expressions
+ * (e.g. target.'cfg(feature = "foo.bar")'.dependencies).
+ *
+ * Capture group 1: the dependency section suffix (dependencies, dev-dependencies, build-dependencies)
+ */
+const TARGET_SECTION_RE = /^\[target\..+\.((?:dev-|build-)?dependencies)\]$/;
+
+/**
+ * Classify a Cargo.toml section header as a dependency type or null.
+ * Handles standard sections, workspace.dependencies, and target.*.dependencies.
+ */
+function classifySection(headerLower: string): DependencyEntry['type'] | null {
+  // Check static map first (handles standard sections + workspace)
+  const staticType = SECTION_TYPE_MAP[headerLower];
+  if (staticType !== undefined) return staticType;
+
+  // Check target-specific sections: [target.'cfg(...)'.dependencies]
+  const targetMatch = TARGET_SECTION_RE.exec(headerLower);
+  if (targetMatch) {
+    const suffix = targetMatch[1]!;
+    if (suffix === 'dependencies') return 'direct';
+    if (suffix === 'dev-dependencies' || suffix === 'build-dependencies') return 'dev';
+  }
+
+  return null;
+}
 
 /**
  * Parse a Cargo.toml manifest and return its dependency entries.
@@ -51,7 +91,7 @@ export async function parseCargoManifest(
     // Check for section headers
     if (trimmed.startsWith('[')) {
       const lower = trimmed.toLowerCase();
-      currentType = SECTION_TYPE_MAP[lower] ?? null;
+      currentType = classifySection(lower);
       continue;
     }
 

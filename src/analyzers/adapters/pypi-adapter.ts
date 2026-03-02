@@ -4,7 +4,12 @@
  *
  * Handles two manifest formats:
  *   - requirements.txt (and variants like requirements-dev.txt)
- *   - pyproject.toml (PEP 621 project.dependencies)
+ *   - pyproject.toml (PEP 621 project.dependencies AND Poetry dependency layouts)
+ *
+ * Poetry layouts supported:
+ *   - [tool.poetry.dependencies] — mapped to type 'direct' (skips `python` entry)
+ *   - [tool.poetry.group.dev.dependencies] — mapped to type 'dev'
+ *   - [tool.poetry.group.*.dependencies] — other groups mapped to type 'optional'
  *
  * Uses line-based parsing — no TOML library dependency. Malformed or missing
  * files are handled gracefully (empty array returned).
@@ -118,15 +123,32 @@ function parseRequirementsTxt(content: string): DependencyEntry[] {
 // ---------------------------------------------------------------------------
 
 /**
+ * Regex to match Poetry section headers and classify them.
+ * Matches:
+ *   [tool.poetry.dependencies]                → 'direct'
+ *   [tool.poetry.group.dev.dependencies]      → 'dev'
+ *   [tool.poetry.group.<name>.dependencies]   → 'optional' (any non-dev group)
+ *   [tool.poetry.dev-dependencies]            → 'dev' (legacy Poetry 1.x format)
+ *
+ * Capture group 1: the group name (if present), undefined for top-level deps.
+ * Capture group 2: 'dev-' prefix (if present), undefined otherwise.
+ */
+const POETRY_SECTION_RE = /^\[tool\.poetry(?:\.group\.(\S+))?\.(dev-)?dependencies\]$/;
+
+/**
  * Parse pyproject.toml content into dependency entries.
- * Extracts dependencies from [project] dependencies array and
- * [project.optional-dependencies] sections.
+ * Extracts dependencies from:
+ *   - [project] dependencies array (PEP 621)
+ *   - [project.optional-dependencies] sections (PEP 621)
+ *   - [tool.poetry.dependencies] (Poetry)
+ *   - [tool.poetry.group.*.dependencies] (Poetry groups)
+ *   - [tool.poetry.dev-dependencies] (Poetry 1.x legacy)
  */
 function parsePyprojectToml(content: string): DependencyEntry[] {
   const entries: DependencyEntry[] = [];
   const lines = content.split('\n');
 
-  let currentSection: 'dependencies' | 'optional' | null = null;
+  let currentSection: 'dependencies' | 'optional' | 'poetry-direct' | 'poetry-dev' | 'poetry-optional' | null = null;
   let inArray = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -138,17 +160,42 @@ function parsePyprojectToml(content: string): DependencyEntry[] {
     // Detect section headers
     if (trimmed.startsWith('[')) {
       const lower = trimmed.toLowerCase();
+      inArray = false;
+
       if (lower === '[project]') {
         // Not directly a dependency section, but contains `dependencies = [...]`
         currentSection = null;
-        inArray = false;
       } else if (lower.startsWith('[project.optional-dependencies')) {
         currentSection = 'optional';
-        inArray = false;
       } else {
-        currentSection = null;
-        inArray = false;
+        // Check for Poetry dependency sections
+        const poetryMatch = POETRY_SECTION_RE.exec(lower);
+        if (poetryMatch) {
+          const groupName = poetryMatch[1]; // undefined for [tool.poetry.dependencies] / [tool.poetry.dev-dependencies]
+          const devPrefix = poetryMatch[2]; // 'dev-' for [tool.poetry.dev-dependencies], undefined otherwise
+          if (groupName === undefined && devPrefix === undefined) {
+            // [tool.poetry.dependencies] — top-level direct deps
+            currentSection = 'poetry-direct';
+          } else if (groupName === 'dev' || devPrefix !== undefined) {
+            // [tool.poetry.group.dev.dependencies] or [tool.poetry.dev-dependencies]
+            currentSection = 'poetry-dev';
+          } else {
+            // [tool.poetry.group.<other>.dependencies]
+            currentSection = 'poetry-optional';
+          }
+        } else {
+          currentSection = null;
+        }
       }
+      continue;
+    }
+
+    // --- Poetry key=value dependency parsing ---
+    if (
+      (currentSection === 'poetry-direct' || currentSection === 'poetry-dev' || currentSection === 'poetry-optional')
+      && !inArray
+    ) {
+      parsePoetryDepLine(trimmed, currentSection, entries);
       continue;
     }
 
@@ -209,6 +256,62 @@ function parsePyprojectToml(content: string): DependencyEntry[] {
   }
 
   return entries;
+}
+
+/**
+ * Parse a single Poetry dependency line (TOML key=value pair) and push
+ * the resulting entry. Skips the `python` key (version constraint, not a dep).
+ *
+ * Supported formats:
+ *   requests = "^2.28"
+ *   requests = {version = "^2.28", optional = true}
+ *   requests = {version = "^2.28", extras = ["security"]}
+ *   python = "^3.9"  (skipped)
+ */
+function parsePoetryDepLine(
+  trimmed: string,
+  section: 'poetry-direct' | 'poetry-dev' | 'poetry-optional',
+  entries: DependencyEntry[],
+): void {
+  const eqIndex = trimmed.indexOf('=');
+  if (eqIndex === -1) return;
+
+  const name = trimmed.slice(0, eqIndex).trim();
+  if (name === '' || name.includes(' ')) return;
+
+  // Skip the python version constraint — it's not a real dependency
+  if (name.toLowerCase() === 'python') return;
+
+  const valueStr = trimmed.slice(eqIndex + 1).trim();
+
+  let version = '*';
+
+  if (valueStr.startsWith('"') || valueStr.startsWith("'")) {
+    // Simple form: package = "^2.28"
+    const quote = valueStr[0]!;
+    const endQuote = valueStr.indexOf(quote, 1);
+    if (endQuote > 1) {
+      version = valueStr.slice(1, endQuote);
+    }
+  } else if (valueStr.startsWith('{')) {
+    // Table form: package = {version = "^2.28", ...}
+    const versionMatch = valueStr.match(/version\s*=\s*["']([^"']*)["']/);
+    if (versionMatch) {
+      version = versionMatch[1] ?? '*';
+    }
+  }
+
+  const depType: DependencyEntry['type'] =
+    section === 'poetry-dev' ? 'dev' :
+    section === 'poetry-optional' ? 'optional' :
+    'direct';
+
+  entries.push({
+    name,
+    version,
+    type: depType,
+    ecosystem: 'pypi',
+  });
 }
 
 /**

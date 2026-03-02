@@ -253,6 +253,115 @@ tokio = "1.28"
     const entries = await parseCargoManifest(tmpRoot, manifestPath);
     expect(entries).toHaveLength(2);
   });
+
+  it('parses [workspace.dependencies] as direct', async () => {
+    const manifestPath = await writeFixture('Cargo.toml', `
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+serde = "1.0"
+tokio = { version = "1.28", features = ["full"] }
+`);
+
+    const entries = await parseCargoManifest(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toEqual({
+      name: 'serde',
+      version: '1.0',
+      type: 'direct',
+      ecosystem: 'cargo',
+    });
+    expect(entries[1]).toEqual({
+      name: 'tokio',
+      version: '1.28',
+      type: 'direct',
+      ecosystem: 'cargo',
+    });
+  });
+
+  it('parses [target.*.dependencies] sections', async () => {
+    const manifestPath = await writeFixture('Cargo.toml', `
+[dependencies]
+serde = "1.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = "0.27"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = "0.3"
+`);
+
+    const entries = await parseCargoManifest(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(3);
+
+    const names = entries.map((e) => e.name);
+    expect(names).toContain('serde');
+    expect(names).toContain('nix');
+    expect(names).toContain('winapi');
+
+    for (const entry of entries) {
+      expect(entry.type).toBe('direct');
+    }
+  });
+
+  it('parses [target.*.dev-dependencies] as dev type', async () => {
+    const manifestPath = await writeFixture('Cargo.toml', `
+[target.'cfg(unix)'.dev-dependencies]
+nix = "0.27"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+`);
+
+    const entries = await parseCargoManifest(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(2);
+
+    expect(entries[0]).toEqual({
+      name: 'nix',
+      version: '0.27',
+      type: 'dev',
+      ecosystem: 'cargo',
+    });
+
+    expect(entries[1]).toEqual({
+      name: 'winres',
+      version: '0.1',
+      type: 'dev',
+      ecosystem: 'cargo',
+    });
+  });
+
+  it('mixes standard, workspace, and target sections', async () => {
+    const manifestPath = await writeFixture('Cargo.toml', `
+[package]
+name = "my-app"
+
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[workspace.dependencies]
+shared-lib = { path = "../shared" }
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.27"
+`);
+
+    const entries = await parseCargoManifest(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(4);
+
+    expect(entries.find((e) => e.name === 'serde')?.type).toBe('direct');
+    expect(entries.find((e) => e.name === 'criterion')?.type).toBe('dev');
+    expect(entries.find((e) => e.name === 'shared-lib')?.type).toBe('direct');
+    expect(entries.find((e) => e.name === 'nix')?.type).toBe('direct');
+  });
 });
 
 // ===========================================================================
@@ -654,5 +763,197 @@ dependencies = [
     expect(entries).toHaveLength(2);
     expect(entries[0]!.name).toBe('boto3');
     expect(entries[1]!.name).toBe('uvicorn');
+  });
+});
+
+// ===========================================================================
+// pypi-adapter (pyproject.toml — Poetry layout)
+// ===========================================================================
+
+describe('parsePythonRequirements — pyproject.toml (Poetry)', () => {
+  it('parses [tool.poetry.dependencies] as direct deps', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[tool.poetry]
+name = "my-poetry-project"
+version = "1.0.0"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28"
+flask = "^2.3"
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(2);
+    expect(entries.find((e) => e.name === 'python')).toBeUndefined();
+
+    expect(entries[0]).toEqual({
+      name: 'requests',
+      version: '^2.28',
+      type: 'direct',
+      ecosystem: 'pypi',
+    });
+
+    expect(entries[1]).toEqual({
+      name: 'flask',
+      version: '^2.3',
+      type: 'direct',
+      ecosystem: 'pypi',
+    });
+  });
+
+  it('parses [tool.poetry.group.dev.dependencies] as dev deps', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+mypy = "^1.0"
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(3);
+
+    const direct = entries.filter((e) => e.type === 'direct');
+    const dev = entries.filter((e) => e.type === 'dev');
+
+    expect(direct).toHaveLength(1);
+    expect(direct[0]!.name).toBe('requests');
+
+    expect(dev).toHaveLength(2);
+    expect(dev.map((e) => e.name)).toContain('pytest');
+    expect(dev.map((e) => e.name)).toContain('mypy');
+  });
+
+  it('parses [tool.poetry.group.*.dependencies] as optional deps', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^6.0"
+sphinx-rtd-theme = "^1.2"
+
+[tool.poetry.group.test.dependencies]
+coverage = "^7.0"
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(4);
+
+    const direct = entries.filter((e) => e.type === 'direct');
+    const optional = entries.filter((e) => e.type === 'optional');
+
+    expect(direct).toHaveLength(1);
+    expect(direct[0]!.name).toBe('requests');
+
+    expect(optional).toHaveLength(3);
+    expect(optional.map((e) => e.name)).toContain('sphinx');
+    expect(optional.map((e) => e.name)).toContain('sphinx-rtd-theme');
+    expect(optional.map((e) => e.name)).toContain('coverage');
+  });
+
+  it('handles Poetry table-style deps: package = {version = "^2.28", optional = true}', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = {version = "^2.28", optional = true}
+boto3 = {version = "^1.26", extras = ["crt"]}
+local-pkg = {path = "../local"}
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(3);
+
+    expect(entries[0]).toEqual({
+      name: 'requests',
+      version: '^2.28',
+      type: 'direct',
+      ecosystem: 'pypi',
+    });
+
+    expect(entries[1]).toEqual({
+      name: 'boto3',
+      version: '^1.26',
+      type: 'direct',
+      ecosystem: 'pypi',
+    });
+
+    // Path-only dep: no version, should get '*'
+    expect(entries[2]).toEqual({
+      name: 'local-pkg',
+      version: '*',
+      type: 'direct',
+      ecosystem: 'pypi',
+    });
+  });
+
+  it('handles legacy [tool.poetry.dev-dependencies] section', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0"
+flake8 = "^6.0"
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(3);
+
+    const direct = entries.filter((e) => e.type === 'direct');
+    const dev = entries.filter((e) => e.type === 'dev');
+
+    expect(direct).toHaveLength(1);
+    expect(direct[0]!.name).toBe('requests');
+
+    expect(dev).toHaveLength(2);
+    expect(dev.map((e) => e.name)).toContain('pytest');
+    expect(dev.map((e) => e.name)).toContain('flake8');
+  });
+
+  it('combines PEP 621 and Poetry dependencies when both exist', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[project]
+name = "hybrid-project"
+dependencies = [
+    "click>=8.0",
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+
+    expect(entries).toHaveLength(3);
+    expect(entries.find((e) => e.name === 'click')?.type).toBe('direct');
+    expect(entries.find((e) => e.name === 'requests')?.type).toBe('direct');
+    expect(entries.find((e) => e.name === 'pytest')?.type).toBe('dev');
+  });
+
+  it('returns empty for pyproject.toml with only Poetry metadata (no deps)', async () => {
+    const manifestPath = await writeFixture('pyproject.toml', `
+[tool.poetry]
+name = "my-project"
+version = "1.0.0"
+description = "A project"
+`);
+
+    const entries = await parsePythonRequirements(tmpRoot, manifestPath);
+    expect(entries).toEqual([]);
   });
 });
