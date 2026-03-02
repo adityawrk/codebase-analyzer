@@ -67,6 +67,8 @@ export interface AnalysisConfig {
   followSymlinks: boolean;
   /** Max file size to analyze (bytes) */
   maxFileSize: number;
+  /** Path to custom rubric YAML (undefined = built-in default) */
+  rubricPath?: string;
 }
 
 export const DEFAULT_CONFIG: Omit<AnalysisConfig, 'root'> = {

@@ -128,7 +128,7 @@ function detectLanguageForFile(relativePath: string): string {
 // ---------------------------------------------------------------------------
 
 /** Extensions considered "code" for directory-based test detection. */
-const CODE_EXTENSIONS = new Set([
+export const CODE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.py', '.go', '.rs', '.java', '.kt', '.rb', '.swift',
   '.c', '.cpp', '.cc', '.h', '.hpp', '.cs', '.php', '.dart',

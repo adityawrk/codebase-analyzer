@@ -284,12 +284,14 @@ export async function analyzeTests(
     const coverageConfigFound = await detectCoverageConfig(index);
 
     // --- Calculate test:code ratio ---
-    // codeLines = non-test total lines (all lines, not just code-only from scc)
+    // codeLines = total lines minus test lines. Uses scc's totalLines (all tracked lines).
     const totalLines = sizing.totalLines;
     const codeLines = totalLines > testLines ? totalLines - testLines : 0;
-    // Ratio = percentage of total lines that are test lines (Proximal-compatible)
-    const testCodeRatio = totalLines > 0
-      ? Math.round((testLines / totalLines) * 10000) / 100
+    // testCodeRatio = testLines / codeLines as a percentage.
+    // "What fraction of non-test code is covered by test code?"
+    // Matches Proximal's "Test/Code Ratio" semantics.
+    const testCodeRatio = codeLines > 0
+      ? Math.round((testLines / codeLines) * 10000) / 100
       : 0;
 
     const durationMs = performance.now() - start;

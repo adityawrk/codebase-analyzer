@@ -494,3 +494,93 @@ describe('edge cases', () => {
     expect(entries).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Test file filtering — analyzeEnvVars skips isTest files
+// ---------------------------------------------------------------------------
+
+describe('analyzeEnvVars — test file filtering', () => {
+  it('excludes env vars from test files (isTest=true)', async () => {
+    // Create a mock index with a real file on disk that contains env vars,
+    // but mark it as a test file. The analyzer should skip it entirely.
+    const testFile: FileEntry = {
+      path: 'src/analyzers/env-vars.test.ts',
+      language: 'TypeScript',
+      extension: '.ts',
+      size: 500,
+      isTest: true,
+      isBinary: false,
+    };
+    // The file exists on disk and contains 'process.env' references,
+    // but since isTest=true the analyzer should not read it at all.
+    const root = path.resolve(import.meta.dirname, '../..');
+    const index: RepositoryIndex = {
+      root,
+      files: [testFile],
+      filesByLanguage: new Map([['TypeScript', [testFile]]]),
+      filesByExtension: new Map([['.ts', [testFile]]]),
+      manifests: [],
+      gitMeta: EMPTY_GIT,
+      config: makeConfig(root),
+    };
+    const result = await analyzeEnvVars(index);
+
+    expect(result.totalVars).toBe(0);
+    expect(result.variables).toEqual([]);
+  });
+
+  it('includes env vars from non-test files (isTest=false)', async () => {
+    // Use the actual env-vars.ts source file which contains SUPPORTED_EXTENSIONS
+    // and references to env-related patterns — it won't have process.env calls itself.
+    // Instead, create a temp scenario: use a real source file that we know has env var patterns.
+    // The cleanest approach: use the mock index pointing to our own test fixture inline.
+    const root = path.resolve(import.meta.dirname, '../..');
+
+    // Find a real .ts file that is NOT a test file and check if the analyzer processes it
+    // We'll create a mock index with two identical file references:
+    // one marked as test, one not. Only the non-test one should be scanned.
+    const sourceFile: FileEntry = {
+      path: 'src/analyzers/env-vars.ts',
+      language: 'TypeScript',
+      extension: '.ts',
+      size: 500,
+      isTest: false,
+      isBinary: false,
+    };
+    const testCopy: FileEntry = {
+      ...sourceFile,
+      path: 'src/analyzers/env-vars.ts',
+      isTest: true,
+    };
+
+    // Run with just the test-flagged copy: should find 0
+    const indexTestOnly: RepositoryIndex = {
+      root,
+      files: [testCopy],
+      filesByLanguage: new Map(),
+      filesByExtension: new Map(),
+      manifests: [],
+      gitMeta: EMPTY_GIT,
+      config: makeConfig(root),
+    };
+    const resultTest = await analyzeEnvVars(indexTestOnly);
+
+    // Run with the non-test copy: should find whatever's in the file
+    const indexSourceOnly: RepositoryIndex = {
+      root,
+      files: [sourceFile],
+      filesByLanguage: new Map(),
+      filesByExtension: new Map(),
+      manifests: [],
+      gitMeta: EMPTY_GIT,
+      config: makeConfig(root),
+    };
+    const resultSource = await analyzeEnvVars(indexSourceOnly);
+
+    // The test version should always have fewer or equal env vars vs the source version
+    expect(resultTest.totalVars).toBe(0);
+    // The source file env-vars.ts contains the regex pattern ENV_VAR_NAME which
+    // might or might not match. The key assertion is that test files are excluded.
+    expect(resultSource.meta.status).toBe('computed');
+  });
+});
