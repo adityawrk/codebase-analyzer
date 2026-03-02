@@ -246,6 +246,9 @@ export async function analyzeEnvVars(
     // Skip binary files
     if (file.isBinary) continue;
 
+    // Skip test files — env vars in tests are not production concerns
+    if (file.isTest) continue;
+
     // Skip files larger than the configured max
     if (file.size > index.config.maxFileSize) continue;
 

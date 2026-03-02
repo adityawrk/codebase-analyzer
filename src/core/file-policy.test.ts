@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildFileList,
+  CODE_EXTENSIONS,
   detectLanguage,
   isBinary,
   isTestFile,
@@ -554,6 +555,64 @@ describe('buildFileList', () => {
 
     for (const file of files) {
       expect(file.path).not.toContain('\\');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CODE_EXTENSIONS coverage
+// ---------------------------------------------------------------------------
+
+describe('CODE_EXTENSIONS', () => {
+  /**
+   * All programming language extensions from EXTENSION_TO_LANGUAGE that should
+   * be in CODE_EXTENSIONS. Data format / markup extensions are intentionally
+   * excluded: .json, .yaml, .yml, .toml, .xml, .md, .html, .htm, .css,
+   * .scss, .sass, .less, .sql, .graphql, .gql, .dockerfile, .proto, .sh,
+   * .bash, .zsh.
+   */
+  const PROGRAMMING_EXTENSIONS = [
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+    '.py', '.go', '.rs', '.java', '.kt', '.rb', '.swift',
+    '.c', '.cpp', '.cc', '.h', '.hpp', '.cs', '.php', '.dart',
+    '.scala', '.clj', '.ex', '.exs', '.erl', '.hs', '.lua', '.r',
+    '.vue', '.svelte',
+  ];
+
+  /** Extensions in EXTENSION_TO_LANGUAGE that are intentionally NOT code. */
+  const DATA_FORMAT_EXTENSIONS = [
+    '.json', '.yaml', '.yml', '.toml', '.xml',
+    '.md', '.html', '.htm', '.css', '.scss', '.sass', '.less',
+    '.sql', '.graphql', '.gql', '.dockerfile', '.proto',
+  ];
+
+  /** Shell extensions are intentionally excluded from CODE_EXTENSIONS. */
+  const SHELL_EXTENSIONS = ['.sh', '.bash', '.zsh'];
+
+  it('contains all programming language extensions from EXTENSION_TO_LANGUAGE', () => {
+    for (const ext of PROGRAMMING_EXTENSIONS) {
+      expect(CODE_EXTENSIONS.has(ext), `CODE_EXTENSIONS should contain ${ext}`).toBe(true);
+    }
+  });
+
+  it('does not contain data format extensions', () => {
+    for (const ext of DATA_FORMAT_EXTENSIONS) {
+      expect(CODE_EXTENSIONS.has(ext), `CODE_EXTENSIONS should NOT contain ${ext}`).toBe(false);
+    }
+  });
+
+  it('.sh is NOT in CODE_EXTENSIONS (intentional gap for test detection)', () => {
+    expect(CODE_EXTENSIONS.has('.sh')).toBe(false);
+  });
+
+  it('.bash and .zsh are NOT in CODE_EXTENSIONS', () => {
+    expect(CODE_EXTENSIONS.has('.bash')).toBe(false);
+    expect(CODE_EXTENSIONS.has('.zsh')).toBe(false);
+  });
+
+  it('all shell extensions are excluded from CODE_EXTENSIONS', () => {
+    for (const ext of SHELL_EXTENSIONS) {
+      expect(CODE_EXTENSIONS.has(ext), `CODE_EXTENSIONS should NOT contain ${ext}`).toBe(false);
     }
   });
 });

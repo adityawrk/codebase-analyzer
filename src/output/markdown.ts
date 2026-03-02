@@ -14,54 +14,6 @@ import type {
 } from '../core/types.js';
 
 // ---------------------------------------------------------------------------
-// Test file detection for env var filtering
-// ---------------------------------------------------------------------------
-
-const TEST_DIR_PATTERNS = [
-  '/__tests__/',
-  '/test/',
-  '/tests/',
-  '/spec/',
-];
-
-const TEST_DIR_START_PATTERNS = [
-  '__tests__/',
-  'test/',
-  'tests/',
-  'spec/',
-];
-
-/**
- * Returns true if the file path looks like a test file.
- * Used to filter out env vars that only appear in test fixtures.
- */
-function isTestFilePath(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
-  const basename = path.basename(filePath);
-
-  // Directory-based detection
-  for (const pattern of TEST_DIR_PATTERNS) {
-    if (normalized.includes(pattern)) return true;
-  }
-  for (const pattern of TEST_DIR_START_PATTERNS) {
-    if (normalized.startsWith(pattern)) return true;
-  }
-
-  // File-name pattern detection: *.test.*, *.spec.*
-  const nameWithoutExt = basename.replace(/\.[^.]+$/, '');
-  if (
-    nameWithoutExt.endsWith('.test') ||
-    nameWithoutExt.endsWith('.spec') ||
-    nameWithoutExt.endsWith('_test') ||
-    nameWithoutExt.endsWith('_spec')
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -193,7 +145,7 @@ function formatLanguages(report: ReportData): string[] {
     const pctRounded = Math.round(lang.percentOfCode);
     const label = lang.extension || `(${lang.language})`;
     lines.push(
-      `| ${padRight(label, 10)} | ${padLeft(String(lang.files), 5)} | ${padLeft(String(lang.lines), 7)} | ${padLeft(String(pctRounded) + '%', 4)} |`,
+      `| ${label.padEnd(10)} | ${String(lang.files).padStart(5)} | ${String(lang.lines).padStart(7)} | ${(String(pctRounded) + '%').padStart(4)} |`,
     );
   }
   lines.push('');
@@ -217,6 +169,8 @@ function formatStructure(report: ReportData): string[] {
 }
 
 function formatTests(report: ReportData): string[] {
+  if (report.testAnalysis.meta.status !== 'computed') return [];
+
   const lines: string[] = [];
   lines.push('## Test Analysis');
   lines.push('');
@@ -449,25 +403,16 @@ function formatEnvVars(report: ReportData): string[] {
     return [];
   }
 
-  // Filter out variables that only appear in test files
-  const nonTestVars = report.envVars.variables.filter((v) => !isTestFilePath(v.file));
-
-  // If all variables were in test files, skip the section entirely
-  if (nonTestVars.length === 0) return [];
+  const vars = report.envVars.variables;
+  if (vars.length === 0) return [];
 
   const lines: string[] = [];
   lines.push('## Environment Variables');
   lines.push('');
-  lines.push(`**${nonTestVars.length} environment variable(s) detected**`);
+  lines.push(`**${vars.length} environment variable(s) detected**`);
   lines.push('');
 
-  // Recompute prefix counts from filtered variables
-  const prefixCounts: Record<string, number> = {};
-  for (const v of nonTestVars) {
-    prefixCounts[v.prefix] = (prefixCounts[v.prefix] ?? 0) + 1;
-  }
-
-  const prefixes = Object.entries(prefixCounts).sort((a, b) => b[1] - a[1]);
+  const prefixes = Object.entries(report.envVars.byPrefix).sort((a, b) => b[1] - a[1]);
   if (prefixes.length > 0) {
     lines.push('### By Prefix');
     lines.push('');
@@ -480,17 +425,17 @@ function formatEnvVars(report: ReportData): string[] {
   }
 
   // Show variable list (capped at 30)
-  const vars = nonTestVars.slice(0, 30);
+  const displayed = vars.slice(0, 30);
   lines.push('### Variables');
   lines.push('');
   lines.push('| Name | File | Line |');
   lines.push('|------|------|------|');
-  for (const v of vars) {
+  for (const v of displayed) {
     lines.push(`| ${v.name} | ${v.file} | ${v.line} |`);
   }
-  if (nonTestVars.length > 30) {
+  if (vars.length > 30) {
     lines.push('');
-    lines.push(`*... and ${nonTestVars.length - 30} more variables*`);
+    lines.push(`*... and ${vars.length - 30} more variables*`);
   }
   lines.push('');
 
@@ -592,17 +537,13 @@ function formatDate(iso: string): string {
   return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
 }
 
-function padRight(s: string, n: number): string {
-  return s.padEnd(n);
-}
-
-function padLeft(s: string, n: number): string {
-  return s.padStart(n);
-}
-
 function capitalize(s: string): string {
   if (s.length === 0) return s;
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  // Handle kebab-case: "repo-health" → "RepoHealth"
+  return s
+    .split('-')
+    .map((part) => (part.length > 0 ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join('');
 }
 
 /**

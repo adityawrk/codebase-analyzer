@@ -115,12 +115,61 @@ describe('analyzeTests', () => {
     expect(result.codeLines).toBe(sizing.totalLines - result.testLines);
   });
 
-  it('testCodeRatio <= 100 (percentage of total lines)', async () => {
+  it('testCodeRatio is positive (test lines / code lines)', async () => {
     const index = await buildTestIndex();
     const sizing = await analyzeSizing(index);
     const result = await analyzeTests(index, sizing);
 
-    expect(result.testCodeRatio).toBeLessThanOrEqual(100);
+    // testCodeRatio = testLines / codeLines * 100
+    // Can exceed 100% if test code outweighs production code
     expect(result.testCodeRatio).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases with synthetic sizing data
+// ---------------------------------------------------------------------------
+
+describe('analyzeTests — edge cases', () => {
+  it('testCodeRatio is 0 when totalLines is 0', async () => {
+    const index = await buildTestIndex();
+    // Create a sizing result that reports 0 total lines (e.g. scc returned nothing)
+    const zeroSizing: import('../core/types.js').SizingResult = {
+      meta: { status: 'computed', durationMs: 1 },
+      totalFiles: 0,
+      totalLines: 0,
+      totalCodeLines: 0,
+      totalBlankLines: 0,
+      totalCommentLines: 0,
+      languages: [],
+      godFiles: [],
+    };
+    const result = await analyzeTests(index, zeroSizing);
+
+    // When totalLines is 0, codeLines should be clamped to 0 and ratio is 0
+    expect(result.testCodeRatio).toBe(0);
+    expect(result.codeLines).toBe(0);
+  });
+
+  it('codeLines is 0 when testLines exceeds totalLines', async () => {
+    const index = await buildTestIndex();
+    // Create a sizing result where totalLines is less than actual test lines
+    // (simulates a scenario where scc counted fewer lines than the test file reader)
+    const smallSizing: import('../core/types.js').SizingResult = {
+      meta: { status: 'computed', durationMs: 1 },
+      totalFiles: 1,
+      totalLines: 1,
+      totalCodeLines: 1,
+      totalBlankLines: 0,
+      totalCommentLines: 0,
+      languages: [],
+      godFiles: [],
+    };
+    const result = await analyzeTests(index, smallSizing);
+
+    // testLines from this project will exceed totalLines=1
+    // The analyzer clamps: codeLines = totalLines > testLines ? totalLines - testLines : 0
+    expect(result.codeLines).toBe(0);
+    expect(result.testCodeRatio).toBe(0);
   });
 });

@@ -66,25 +66,63 @@ program
       console.error('Error: --max-file-size must be a positive integer (bytes)');
       process.exit(1);
     }
+    if (maxFileSize > 104_857_600) {
+      console.error('Error: --max-file-size cannot exceed 100MB (104857600 bytes)');
+      process.exit(1);
+    }
+    if (timeout > 600_000) {
+      console.error('Error: --timeout cannot exceed 600000ms (10 minutes)');
+      process.exit(1);
+    }
+
+    // Validate --rubric path if provided
+    const rubricPath = options.rubric as string | undefined;
+    if (rubricPath) {
+      const resolvedRubric = path.resolve(rubricPath);
+      const ext = path.extname(resolvedRubric).toLowerCase();
+      if (ext !== '.yaml' && ext !== '.yml') {
+        console.error('Error: --rubric must point to a .yaml or .yml file');
+        process.exit(1);
+      }
+      try {
+        await fs.access(resolvedRubric);
+      } catch {
+        console.error(`Error: rubric file not found: ${resolvedRubric}`);
+        process.exit(1);
+      }
+    }
+
+    // Validate --output path if provided
+    const outputPath = (options.output as string) ?? null;
+    if (outputPath) {
+      const resolvedOutput = path.resolve(outputPath);
+      const parentDir = path.dirname(resolvedOutput);
+      try {
+        await fs.access(parentDir);
+      } catch {
+        console.error(`Error: output directory does not exist: ${parentDir}`);
+        process.exit(1);
+      }
+    }
 
     const config: AnalysisConfig = {
       ...DEFAULT_CONFIG,
       root: absolutePath,
       format: format as 'markdown' | 'json',
-      outputPath: (options.output as string) ?? null,
+      outputPath,
       offline: options.offline as boolean,
       timeout,
       include: (options.include as string[]) ?? [],
       exclude: (options.exclude as string[]) ?? [],
       followSymlinks: options.followSymlinks as boolean,
       maxFileSize,
+      rubricPath: rubricPath ? path.resolve(rubricPath) : undefined,
     };
 
-    const rubricPath = options.rubric as string | undefined;
     const startTime = performance.now();
 
     try {
-      const report = await analyzeRepository(absolutePath, config, rubricPath);
+      const report = await analyzeRepository(absolutePath, config);
       const output = format === 'json' ? formatJson(report) : formatMarkdown(report);
 
       if (config.outputPath) {
