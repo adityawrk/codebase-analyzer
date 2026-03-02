@@ -6,20 +6,17 @@
 # extracts it to a temp directory, and runs it against the specified repo.
 #
 # Usage:
-#   ./analyze-codebase.sh <repo-path> [options]
-#   ./analyze-codebase.sh .                        # Analyze current directory
-#   ./analyze-codebase.sh . --format json           # JSON output
-#   ./analyze-codebase.sh . > codebase_analysis.md  # Save report to file
+#   ./analyze-codebase.sh <repo-path>                  # Saves to ~/
+#   ./analyze-codebase.sh . -o ./report.md             # Custom output path
+#   ./analyze-codebase.sh . --format json              # JSON to ~/
 #
 # One-liner (download + run):
 #   curl -sLo analyze-codebase.sh https://gist.githubusercontent.com/adityawrk/fbca749711e84d991358489ee7accecc/raw && \
-#     chmod +x analyze-codebase.sh && ./analyze-codebase.sh . > codebase_analysis.md
+#     chmod +x analyze-codebase.sh && ./analyze-codebase.sh .
 #
 # Environment variables:
 #   CODEBASE_ANALYZER_VERSION  Override version (default: latest)
 #   CODEBASE_ANALYZER_CACHE    Cache directory (default: ~/.cache/codebase-analyzer)
-#
-# All status output goes to stderr. Only the report goes to stdout.
 # =============================================================================
 
 set -euo pipefail
@@ -148,13 +145,14 @@ if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
 Usage: analyze-codebase.sh <repo-path> [options]
 
 Analyze a codebase and produce a static analysis report.
+Report is saved to your home directory by default.
 
 Arguments:
   <repo-path>     Path to the repository to analyze
 
 Options (passed through to codebase-analyzer):
   -f, --format <format>     Output format: markdown or json (default: markdown)
-  -o, --output <file>       Write report to file instead of stdout
+  -o, --output <file>       Custom output path (default: ~/<repo>_codebase_analysis.md)
   --rubric <path>           Path to custom rubric YAML
   --offline                 Skip external tool calls
   --timeout <ms>            Per-tool timeout in milliseconds (default: 60000)
@@ -167,10 +165,11 @@ Environment:
   CODEBASE_ANALYZER_CACHE     Cache dir (default: ~/.cache/codebase-analyzer)
 
 Examples:
-  ./analyze-codebase.sh .                             # Markdown to stdout
-  ./analyze-codebase.sh . > codebase_analysis.md      # Save to file
-  ./analyze-codebase.sh . --format json -o report.json
-  ./analyze-codebase.sh /path/to/repo --offline
+  ./analyze-codebase.sh .                               # ~/myrepo_codebase_analysis.md
+  ./analyze-codebase.sh /path/to/repo                   # ~/repo_codebase_analysis.md
+  ./analyze-codebase.sh . -o ./report.md                # Custom output path
+  ./analyze-codebase.sh . --format json                 # ~/myrepo_codebase_analysis.json
+  ./analyze-codebase.sh . --offline
 USAGE
   exit 0
 fi
@@ -179,10 +178,49 @@ fi
 REPO_PATH="$1"
 shift
 
+# Resolve the repo name for the output filename
+REPO_ABS_PATH="$(cd "$REPO_PATH" 2>/dev/null && pwd)" || error "Cannot access: $REPO_PATH"
+REPO_NAME="$(basename "$REPO_ABS_PATH")"
+
+# Determine output format and whether the user specified -o / --output
+USER_OUTPUT=false
+USER_FORMAT="markdown"
+ARGS_COPY=("$@")
+i=0
+while [ $i -lt ${#ARGS_COPY[@]} ]; do
+  arg="${ARGS_COPY[$i]}"
+  case "$arg" in
+    -o|--output)
+      USER_OUTPUT=true
+      ;;
+    -f|--format)
+      if [ $((i + 1)) -lt ${#ARGS_COPY[@]} ]; then
+        USER_FORMAT="${ARGS_COPY[$((i + 1))]}"
+      fi
+      ;;
+  esac
+  i=$((i + 1))
+done
+
+# If user didn't specify -o, auto-generate output path in $HOME
+if [ "$USER_OUTPUT" = false ]; then
+  if [ "$USER_FORMAT" = "json" ]; then
+    OUTPUT_EXT="json"
+  else
+    OUTPUT_EXT="md"
+  fi
+  OUTPUT_PATH="$HOME/${REPO_NAME}_codebase_analysis.${OUTPUT_EXT}"
+fi
+
 check_dependencies
 
 PLATFORM="$(detect_platform)"
 info "Platform: $PLATFORM"
+
+# Show where the report will be saved
+if [ "$USER_OUTPUT" = false ]; then
+  info "Report will be saved to: $OUTPUT_PATH"
+fi
 
 resolve_version
 download_and_extract "$PLATFORM"
@@ -194,7 +232,7 @@ RUBRIC_PATH="$TMPDIR_CREATED/rubric.yaml"
 
 # Build the command — inject --rubric if the bundled rubric exists
 # and the user hasn't specified their own
-CMD=("$TMPDIR_CREATED/codebase-analyzer" "analyze" "$REPO_PATH")
+CMD=("$TMPDIR_CREATED/codebase-analyzer" "analyze" "$REPO_ABS_PATH")
 
 USER_RUBRIC=false
 for arg in "$@"; do
@@ -208,10 +246,23 @@ if [ "$USER_RUBRIC" = false ] && [ -f "$RUBRIC_PATH" ]; then
   CMD+=("--rubric" "$RUBRIC_PATH")
 fi
 
+# Inject auto-generated output path if user didn't specify one
+if [ "$USER_OUTPUT" = false ]; then
+  CMD+=("--output" "$OUTPUT_PATH")
+fi
+
 CMD+=("$@")
 
 info "Running analysis..."
 info ""
 
-# Execute — report goes to stdout, status already on stderr
-exec "${CMD[@]}"
+# Execute the analyzer
+"${CMD[@]}"
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ] && [ "$USER_OUTPUT" = false ]; then
+  info ""
+  info "Done! Report saved to: $OUTPUT_PATH"
+fi
+
+exit $EXIT_CODE
