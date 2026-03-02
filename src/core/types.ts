@@ -172,6 +172,9 @@ export interface StructureResult {
 // -- Repo Health --
 
 export interface HealthCheck {
+  /** Stable machine identifier used by the scoring engine (e.g. 'readme', 'license', 'ci') */
+  id: string;
+  /** Human-readable display name for reports (e.g. 'README', 'CI Configuration') */
   name: string;
   present: boolean;
   path?: string;

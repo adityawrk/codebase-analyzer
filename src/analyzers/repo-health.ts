@@ -14,6 +14,8 @@ import type { RepositoryIndex, RepoHealthResult, HealthCheck, AnalyzerMeta } fro
 // ---------------------------------------------------------------------------
 
 interface CheckDef {
+  /** Stable machine identifier for scoring (e.g. 'readme', 'license', 'ci') */
+  id: string;
   /** Human-readable name shown in the report */
   name: string;
   /** File basenames to search for (case-insensitive) */
@@ -54,52 +56,62 @@ function detectCIPlatforms(matches: string[]): string | undefined {
 
 const CHECKS: CheckDef[] = [
   {
+    id: 'readme',
     name: 'README',
     filenames: ['README.md', 'README', 'README.txt', 'README.rst'],
     anyDepth: false,
   },
   {
+    id: 'license',
     name: 'LICENSE',
     filenames: ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'LICENCE.md'],
     anyDepth: false,
   },
   {
+    id: 'ci',
     name: 'CI Configuration',
     filenames: [], // handled specially via matchCI
     anyDepth: true,
     note: detectCIPlatforms,
   },
   {
+    id: 'contributing',
     name: 'CONTRIBUTING',
     filenames: ['CONTRIBUTING.md'],
     anyDepth: false,
   },
   {
+    id: 'gitignore',
     name: '.gitignore',
     filenames: ['.gitignore'],
     anyDepth: false,
   },
   {
+    id: 'editorconfig',
     name: '.editorconfig',
     filenames: ['.editorconfig'],
     anyDepth: false,
   },
   {
+    id: 'dockerfile',
     name: 'Dockerfile',
     filenames: ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml'],
     anyDepth: true,
   },
   {
+    id: 'securityPolicy',
     name: 'Security Policy',
     filenames: ['SECURITY.md'],
     anyDepth: false,
   },
   {
+    id: 'codeOfConduct',
     name: 'Code of Conduct',
     filenames: ['CODE_OF_CONDUCT.md'],
     anyDepth: false,
   },
   {
+    id: 'changelog',
     name: 'Changelog',
     filenames: ['CHANGELOG.md', 'CHANGES.md', 'HISTORY.md'],
     anyDepth: false,
@@ -189,6 +201,7 @@ export async function analyzeRepoHealth(index: RepositoryIndex): Promise<RepoHea
     const present = matches.length > 0;
 
     const check: HealthCheck = {
+      id: checkDef.id,
       name: checkDef.name,
       present,
     };

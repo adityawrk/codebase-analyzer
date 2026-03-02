@@ -58,10 +58,10 @@ const CATEGORY_EXTRACTORS: Record<string, CategoryExtractor> = {
     status: (r) => r.repoHealth.meta.status,
     metrics: (r) => {
       const result: Record<string, boolean> = {};
-      const checkNames = ['readme', 'license', 'ci', 'gitignore', 'editorconfig', 'contributing'];
-      for (const name of checkNames) {
-        const check = r.repoHealth.checks.find((c) => c.name === name);
-        result[name] = check?.present ?? false;
+      const checkIds = ['readme', 'license', 'ci', 'gitignore', 'editorconfig', 'contributing'];
+      for (const id of checkIds) {
+        const check = r.repoHealth.checks.find((c) => c.id === id);
+        result[id] = check?.present ?? false;
       }
       return result;
     },
@@ -184,13 +184,8 @@ export function computeScoring(report: ReportData, rubric: Rubric): ScoringResul
 
     const status = extractor.status(report);
 
-    // Skip categories where the analyzer did not complete
+    // Skip categories where the analyzer did not complete — don't include in scoring
     if (status !== 'computed') {
-      categories[categoryName] = {
-        score: 0,
-        maxScore: categoryDef.weight,
-        metrics: buildSkippedMetrics(categoryDef),
-      };
       continue;
     }
 
@@ -255,17 +250,4 @@ function scoreCategory(
     maxScore: categoryMaxScore,
     metrics,
   };
-}
-
-function buildSkippedMetrics(categoryDef: CategoryDefinition): Record<string, MetricScore> {
-  const metrics: Record<string, MetricScore> = {};
-  for (const [metricName, metricDef] of Object.entries(categoryDef.metrics)) {
-    metrics[metricName] = {
-      score: 0,
-      maxScore: metricDef.weight,
-      label: 'Analyzer skipped',
-      value: undefined,
-    };
-  }
-  return metrics;
 }
