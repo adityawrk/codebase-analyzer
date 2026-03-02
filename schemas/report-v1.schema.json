@@ -204,11 +204,15 @@
           "description": "Array of health check results",
           "items": {
             "type": "object",
-            "required": ["name", "present"],
+            "required": ["id", "name", "present"],
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable machine identifier for scoring (e.g. 'readme', 'license', 'ci')"
+              },
               "name": {
                 "type": "string",
-                "description": "Check identifier (human-readable name)"
+                "description": "Human-readable display name for reports"
               },
               "present": {
                 "type": "boolean",
@@ -426,7 +430,8 @@
                 "type": "string",
                 "description": "Human-readable description of the finding"
               }
-            }
+            },
+            "additionalProperties": false
           },
           "description": "Secret findings. NEVER contains raw secret values."
         },

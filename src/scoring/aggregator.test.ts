@@ -36,7 +36,7 @@ function makeFullReport(overrides?: Partial<{
   testFrameworkCount: number;
   avgComplexity: number;
   maxComplexity: number;
-  healthChecks: Array<{ name: string; present: boolean }>;
+  healthChecks: Array<{ id: string; name: string; present: boolean }>;
   treeDepth: number;
   filesPerFolder: number;
 }>): ReportData {
@@ -54,12 +54,12 @@ function makeFullReport(overrides?: Partial<{
     avgComplexity: 2,
     maxComplexity: 8,
     healthChecks: [
-      { name: 'readme', present: true },
-      { name: 'license', present: true },
-      { name: 'ci', present: true },
-      { name: 'gitignore', present: true },
-      { name: 'editorconfig', present: true },
-      { name: 'contributing', present: true },
+      { id: 'readme', name: 'README', present: true },
+      { id: 'license', name: 'LICENSE', present: true },
+      { id: 'ci', name: 'CI Configuration', present: true },
+      { id: 'gitignore', name: '.gitignore', present: true },
+      { id: 'editorconfig', name: '.editorconfig', present: true },
+      { id: 'contributing', name: 'CONTRIBUTING', present: true },
     ],
     treeDepth: 3,
     filesPerFolder: 5,
@@ -103,6 +103,7 @@ function makeFullReport(overrides?: Partial<{
     repoHealth: {
       meta: makeMeta(o.repoHealthStatus),
       checks: o.healthChecks.map((c) => ({
+        id: c.id,
         name: c.name,
         present: c.present,
       })),
@@ -312,9 +313,9 @@ describe('computeScoring — partial data', () => {
     // Partial should have lower totalPossible
     expect(partialResult.totalPossible).toBeLessThan(fullResult.totalPossible);
 
-    // Skipped categories should have 0 score
-    expect(partialResult.categories['testing']!.score).toBe(0);
-    expect(partialResult.categories['complexity']!.score).toBe(0);
+    // Skipped categories should be excluded from scoring results entirely
+    expect(partialResult.categories['testing']).toBeUndefined();
+    expect(partialResult.categories['complexity']).toBeUndefined();
   });
 
   it('skipped analyzers do not count toward totalPossible', () => {
@@ -449,12 +450,12 @@ describe('computeScoring — grade boundaries', () => {
       avgComplexity: 25,     // score 0/10
       maxComplexity: 60,     // score 0/10
       healthChecks: [
-        { name: 'readme', present: false },
-        { name: 'license', present: false },
-        { name: 'ci', present: false },
-        { name: 'gitignore', present: false },
-        { name: 'editorconfig', present: false },
-        { name: 'contributing', present: false },
+        { id: 'readme', name: 'README', present: false },
+        { id: 'license', name: 'LICENSE', present: false },
+        { id: 'ci', name: 'CI Configuration', present: false },
+        { id: 'gitignore', name: '.gitignore', present: false },
+        { id: 'editorconfig', name: '.editorconfig', present: false },
+        { id: 'contributing', name: 'CONTRIBUTING', present: false },
       ],
       treeDepth: 15,         // score 1/10
       filesPerFolder: 60,    // score 1/15
@@ -475,12 +476,12 @@ describe('computeScoring — grade boundaries', () => {
       avgComplexity: 15,      // score 3/10
       maxComplexity: 30,      // score 2/10
       healthChecks: [
-        { name: 'readme', present: true },
-        { name: 'license', present: false },
-        { name: 'ci', present: true },
-        { name: 'gitignore', present: true },
-        { name: 'editorconfig', present: false },
-        { name: 'contributing', present: false },
+        { id: 'readme', name: 'README', present: true },
+        { id: 'license', name: 'LICENSE', present: false },
+        { id: 'ci', name: 'CI Configuration', present: true },
+        { id: 'gitignore', name: '.gitignore', present: true },
+        { id: 'editorconfig', name: '.editorconfig', present: false },
+        { id: 'contributing', name: 'CONTRIBUTING', present: false },
       ],
       treeDepth: 10,          // score 4/10
       filesPerFolder: 30,     // score 8/15
@@ -502,12 +503,12 @@ describe('computeScoring — grade boundaries', () => {
       avgComplexity: 7,       // score 6/10
       maxComplexity: 18,      // score 5/10
       healthChecks: [
-        { name: 'readme', present: true },
-        { name: 'license', present: true },
-        { name: 'ci', present: false },
-        { name: 'gitignore', present: true },
-        { name: 'editorconfig', present: false },
-        { name: 'contributing', present: false },
+        { id: 'readme', name: 'README', present: true },
+        { id: 'license', name: 'LICENSE', present: true },
+        { id: 'ci', name: 'CI Configuration', present: false },
+        { id: 'gitignore', name: '.gitignore', present: true },
+        { id: 'editorconfig', name: '.editorconfig', present: false },
+        { id: 'contributing', name: 'CONTRIBUTING', present: false },
       ],
       treeDepth: 6,           // score 7/10
       filesPerFolder: 15,     // score 12/15
@@ -524,12 +525,12 @@ describe('computeScoring — repoHealth metric extraction', () => {
     const rubric = loadRubric(RUBRIC_PATH);
     const report = makeFullReport({
       healthChecks: [
-        { name: 'readme', present: true },
-        { name: 'license', present: false },
-        { name: 'ci', present: true },
-        { name: 'gitignore', present: true },
-        { name: 'editorconfig', present: false },
-        { name: 'contributing', present: false },
+        { id: 'readme', name: 'README', present: true },
+        { id: 'license', name: 'LICENSE', present: false },
+        { id: 'ci', name: 'CI Configuration', present: true },
+        { id: 'gitignore', name: '.gitignore', present: true },
+        { id: 'editorconfig', name: '.editorconfig', present: false },
+        { id: 'contributing', name: 'CONTRIBUTING', present: false },
       ],
     });
     const result = computeScoring(report, rubric);
@@ -553,7 +554,7 @@ describe('computeScoring — repoHealth metric extraction', () => {
     const rubric = loadRubric(RUBRIC_PATH);
     const report = makeFullReport({
       healthChecks: [
-        { name: 'readme', present: true },
+        { id: 'readme', name: 'README', present: true },
         // Other checks are missing entirely
       ],
     });

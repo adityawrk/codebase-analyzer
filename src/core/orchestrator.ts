@@ -288,13 +288,16 @@ export async function analyzeRepository(
     architecture,
   };
 
-  // Phase 3: Compute scoring
+  // Phase 3: Compute scoring (skip if rubric failed to load)
   const rubric = loadRubric();
-  const scoring = computeScoring(report, rubric);
-  report.scoring = scoring;
-  report.meta.grade = scoring.grade;
-  report.meta.score = scoring.normalizedScore;
-  report.meta.durationMs = overallDurationMs;
+  const hasRubric = Object.keys(rubric.categories).length > 0;
+  if (hasRubric) {
+    const scoring = computeScoring(report, rubric);
+    report.scoring = scoring;
+    report.meta.grade = scoring.grade;
+    report.meta.score = scoring.normalizedScore;
+  }
+  report.meta.durationMs = Math.round(performance.now() - overallStart);
 
   return report;
 }
