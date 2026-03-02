@@ -59,7 +59,7 @@ CLI (commander) → Orchestrator → RepositoryIndex (single-pass)
 - Error handling: external tool failures return `{ tool, exitCode, stderr, timedOut }`, never throw.
 - Tests: Vitest. Co-locate unit tests as `*.test.ts` next to source. Golden output tests in `tests/golden/`.
 - Conventional commits: `feat(analyzer):`, `fix(scoring):`, `test(golden):`, etc.
-- `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>` on all AI-assisted commits.
+- **Git author**: Always use `Aditya Patni <adityapatni2106@gmail.com>`. Do NOT add `Co-Authored-By` trailers.
 
 ## Security Policy
 - **Repos are untrusted input.** Every file path goes through `file-policy.ts`. No `eval()` on repo content. No shell interpolation.
