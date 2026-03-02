@@ -497,6 +497,43 @@
             "commitsPerMonth": { "type": "number", "minimum": 0 }
           }
         },
+        "recentCommits": {
+          "type": "array",
+          "description": "Most recent commits with hash, message, author, and relative date",
+          "maxItems": 15,
+          "items": {
+            "type": "object",
+            "required": ["hash", "message", "author", "date"],
+            "additionalProperties": false,
+            "properties": {
+              "hash": { "type": "string" },
+              "message": { "type": "string" },
+              "author": { "type": "string" },
+              "date": { "type": "string" }
+            }
+          }
+        },
+        "avgMessageLength": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Average first-line commit message length in characters"
+        },
+        "shortMessageCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of commits with messages shorter than 10 characters"
+        },
+        "commitsWithTests": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of commits that touch at least one test file"
+        },
+        "commitsWithTestsPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of commits that include test file changes"
+        },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
     },
