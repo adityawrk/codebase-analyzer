@@ -33,7 +33,7 @@ class CodebaseAnalyzer < Formula
   desc "Self-hosted static analysis CLI that produces codebase reports without LLM dependency"
   homepage "https://github.com/adityawrk/codebase-analyzer"
   version "0.1.0"
-  license "MIT"
+  license :cannot_represent
 
   # ── Platform-specific binaries ──────────────────────────────────────
   #
