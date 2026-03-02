@@ -135,7 +135,7 @@ function validateCategories(
 
       metrics[mKey] = {
         weight: mWeight,
-        description: typeof m['description'] === 'string' ? m['description'] as string : '',
+        description: typeof m['description'] === 'string' ? m['description'] : '',
         thresholds: validThresholds,
       };
     }
@@ -168,15 +168,16 @@ export function loadRubric(rubricPath?: string): Rubric {
 
   try {
     const raw = readFileSync(filePath, 'utf-8');
-    const parsed = yaml.parse(raw);
+    const parsed: unknown = yaml.parse(raw);
 
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       console.warn(`[rubric] Invalid rubric format at ${filePath} — expected YAML mapping`);
       return emptyRubric();
     }
 
-    const categories = validateCategories(parsed['categories']);
-    const gradeBoundaries = validateGradeBoundaries(parsed['gradeBoundaries']);
+    const doc = parsed as Record<string, unknown>;
+    const categories = validateCategories(doc['categories']);
+    const gradeBoundaries = validateGradeBoundaries(doc['gradeBoundaries']);
 
     // Warn on weight mismatches (non-fatal)
     let computedTotal = 0;
@@ -188,13 +189,13 @@ export function loadRubric(rubricPath?: string): Rubric {
       computedTotal += cat.weight;
     }
 
-    const totalWeight = typeof parsed['totalWeight'] === 'number' ? parsed['totalWeight'] : 100;
+    const totalWeight = typeof doc['totalWeight'] === 'number' ? doc['totalWeight'] : 100;
     if (Object.keys(categories).length > 0 && computedTotal !== totalWeight) {
       console.warn(`[rubric] totalWeight (${totalWeight}) != category sum (${computedTotal})`);
     }
 
     return {
-      version: typeof parsed['version'] === 'number' ? parsed['version'] : 1,
+      version: typeof doc['version'] === 'number' ? doc['version'] : 1,
       totalWeight,
       categories,
       gradeBoundaries,

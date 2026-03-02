@@ -180,7 +180,7 @@ function emptyArchitecture(): ArchitectureResult {
 
 async function runWithTiming<T>(
   name: string,
-  fn: () => Promise<T>,
+  fn: () => T | Promise<T>,
   fallback: () => T,
 ): Promise<T> {
   const start = performance.now();

@@ -191,7 +191,7 @@ function findMatches(
 // Main analyzer
 // ---------------------------------------------------------------------------
 
-export async function analyzeRepoHealth(index: RepositoryIndex): Promise<RepoHealthResult> {
+export function analyzeRepoHealth(index: RepositoryIndex): RepoHealthResult {
   const start = performance.now();
 
   const checks: HealthCheck[] = [];

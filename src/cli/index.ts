@@ -108,7 +108,7 @@ program
     const config: AnalysisConfig = {
       ...DEFAULT_CONFIG,
       root: absolutePath,
-      format: format as 'markdown' | 'json',
+      format,
       outputPath,
       offline: options.offline as boolean,
       timeout,

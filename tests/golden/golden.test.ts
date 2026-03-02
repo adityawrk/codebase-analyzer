@@ -161,7 +161,7 @@ describe.skipIf(SKIP_NON_VITEST)('Golden output tests', { timeout: 120_000 }, ()
       '## Cyclomatic Complexity',
       '## Git Analysis',
       '## Dependencies',
-      '## Largest Files',
+      '## Largest Files (Total Lines)',
       '## Security',
     ];
 

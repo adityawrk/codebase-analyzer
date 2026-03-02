@@ -38,9 +38,11 @@ class CodebaseAnalyzer < Formula
   # ── Platform-specific binaries ──────────────────────────────────────
   #
   # Each release tarball contains:
-  #   codebase-analyzer          (the compiled bun binary)
-  #   wasm/tree-sitter.wasm      (web-tree-sitter runtime)
-  #   wasm/tree-sitter-*.wasm    (per-language grammar files)
+  #   codebase-analyzer              (the compiled bun binary)
+  #   wasm/tree-sitter.wasm          (web-tree-sitter runtime)
+  #   wasm/tree-sitter-*.wasm        (per-language grammar files)
+  #   rubric.yaml                    (default scoring rubric)
+  #   data/package-purposes.json     (package purpose lookup table)
   #
   # The tarball is produced by scripts/build-release.sh.
 
@@ -91,22 +93,20 @@ class CodebaseAnalyzer < Formula
     # ── Strategy ──────────────────────────────────────────────────────
     #
     # The binary is a self-contained bun-compiled executable. However,
-    # tree-sitter WASM files (runtime + grammars) cannot be embedded in
-    # the binary and must be loadable at runtime.
+    # tree-sitter WASM files, the scoring rubric, and data lookup tables
+    # cannot be embedded in the binary and must be loadable at runtime.
     #
-    # We install the binary and WASM files to libexec, then create a
-    # thin wrapper script in bin that sets CODEBASE_ANALYZER_WASM_DIR
-    # so the binary knows where to find the WASM files.
+    # We install everything to libexec, then create a thin wrapper
+    # script in bin that sets the required env vars and passes the
+    # rubric path via --rubric.
     #
     # Installation layout:
-    #   #{libexec}/codebase-analyzer                (the real binary)
-    #   #{libexec}/wasm/tree-sitter.wasm            (runtime)
-    #   #{libexec}/wasm/tree-sitter-typescript.wasm  (grammar)
-    #   #{libexec}/wasm/tree-sitter-tsx.wasm         (grammar)
-    #   #{libexec}/wasm/tree-sitter-javascript.wasm  (grammar)
-    #   #{libexec}/wasm/tree-sitter-python.wasm      (grammar)
-    #   #{libexec}/wasm/tree-sitter-go.wasm          (grammar)
-    #   #{bin}/codebase-analyzer                     (wrapper script)
+    #   #{libexec}/codebase-analyzer                    (the real binary)
+    #   #{libexec}/wasm/tree-sitter.wasm                (runtime)
+    #   #{libexec}/wasm/tree-sitter-*.wasm              (grammars)
+    #   #{libexec}/rubric.yaml                          (scoring rubric)
+    #   #{libexec}/data/package-purposes.json           (lookup table)
+    #   #{bin}/codebase-analyzer                        (wrapper script)
 
     # Install binary to libexec (not directly to bin)
     libexec.install "codebase-analyzer"
@@ -114,15 +114,20 @@ class CodebaseAnalyzer < Formula
     # Install WASM files alongside the binary in libexec/wasm/
     (libexec/"wasm").install Dir["wasm/*.wasm"]
 
-    # Create a wrapper script in bin that sets the WASM path and
-    # delegates to the real binary. This is the standard Homebrew
-    # pattern for binaries that need sibling files.
+    # Install rubric and data files
+    libexec.install "rubric.yaml"
+    (libexec/"data").install "data/package-purposes.json"
+
+    # Create a wrapper script in bin that sets env vars and delegates
+    # to the real binary. This is the standard Homebrew pattern for
+    # binaries that need sibling files.
     (bin/"codebase-analyzer").write <<~BASH
       #!/usr/bin/env bash
       # Homebrew wrapper for codebase-analyzer.
-      # Sets WASM directory so tree-sitter grammars are discoverable.
+      # Sets runtime directories and default rubric path.
       export CODEBASE_ANALYZER_WASM_DIR="#{libexec}/wasm"
-      exec "#{libexec}/codebase-analyzer" "$@"
+      export CODEBASE_ANALYZER_DATA_DIR="#{libexec}/data"
+      exec "#{libexec}/codebase-analyzer" --rubric "#{libexec}/rubric.yaml" "$@"
     BASH
   end
 

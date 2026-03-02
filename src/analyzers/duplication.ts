@@ -190,7 +190,13 @@ function makeRelative(filePath: string, repoRoot: string): string {
   const absolute = path.isAbsolute(filePath)
     ? filePath
     : path.resolve(repoRoot, filePath);
-  return path.relative(repoRoot, absolute) || filePath;
+  const rel = path.relative(repoRoot, absolute) || filePath;
+  // Prevent leaking operator filesystem paths — if the relative path
+  // escapes the repo root (starts with ..), use just the basename.
+  if (rel.startsWith('..')) {
+    return path.basename(filePath);
+  }
+  return rel;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +255,8 @@ export async function analyzeDuplication(
     // Run jscpd on the repo root directory.
     // jscpd's `path` config expects directories, not individual files.
     // We pass the repo root and let jscpd handle its own file discovery.
-    // Its built-in ignores (node_modules, .git, etc.) align well with ours.
+    // Explicitly ignore node_modules, .git, vendor, and dist — jscpd's
+    // built-in ignores are inconsistent across versions.
     const result = await execTool(
       'jscpd',
       [
@@ -257,6 +264,7 @@ export async function analyzeDuplication(
         '--output', tempDir,
         '--min-lines', '5',
         '--min-tokens', '50',
+        '--ignore', 'node_modules,**/.git,vendor,dist,build,.next',
         index.root,
       ],
       { timeout: index.config.timeout, cwd: index.root },

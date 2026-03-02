@@ -38,17 +38,28 @@ type PackagePurposeMap = Record<string, PackagePurpose>;
 let cachedPurposeMap: PackagePurposeMap | null = null;
 
 /**
+ * Directory override for data files. When set (e.g. by a distribution wrapper
+ * script or Docker entrypoint), package-purposes.json is loaded from this
+ * directory instead of the default relative path.
+ */
+const DATA_DIR_OVERRIDE = process.env['CODEBASE_ANALYZER_DATA_DIR'] || null;
+
+/**
  * Load the package-purposes.json lookup table from the data/ directory.
+ *
+ * Resolution order:
+ *   1. CODEBASE_ANALYZER_DATA_DIR env var (set by wrapper scripts, Homebrew, etc.)
+ *   2. Relative path from source (development / bun build)
+ *
  * Returns an empty map on failure (graceful degradation).
  */
 function loadPackagePurposes(): PackagePurposeMap {
   if (cachedPurposeMap !== null) return cachedPurposeMap;
 
   try {
-    const lookupPath = path.resolve(
-      import.meta.dirname,
-      '../../data/package-purposes.json',
-    );
+    const lookupPath = DATA_DIR_OVERRIDE
+      ? path.join(DATA_DIR_OVERRIDE, 'package-purposes.json')
+      : path.resolve(import.meta.dirname, '../../data/package-purposes.json');
     const raw = fs.readFileSync(lookupPath, 'utf-8');
     cachedPurposeMap = JSON.parse(raw) as PackagePurposeMap;
     return cachedPurposeMap;
@@ -480,9 +491,9 @@ function deduplicateEntries(entries: TechStackEntry[]): TechStackEntry[] {
  *
  * Never throws — returns error meta on failure.
  */
-export async function analyzeTechStack(
+export function analyzeTechStack(
   index: RepositoryIndex,
-): Promise<TechStackResult> {
+): TechStackResult {
   const start = performance.now();
 
   try {

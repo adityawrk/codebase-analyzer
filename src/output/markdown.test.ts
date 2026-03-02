@@ -617,7 +617,7 @@ describe('formatGodFiles section', () => {
       }),
     });
     const output = formatMarkdown(report);
-    expect(output).toContain('## God Files (>500 LOC)');
+    expect(output).toContain('## God Files (>500 Code Lines)');
     expect(output).toContain('| src/giant.ts | 1200 | TypeScript |');
     expect(output).toContain('| src/monster.ts | 800 | TypeScript |');
   });

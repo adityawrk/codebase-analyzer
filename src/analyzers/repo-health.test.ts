@@ -54,7 +54,7 @@ function makeMockIndex(files: FileEntry[]): RepositoryIndex {
 describe('analyzeRepoHealth', () => {
   it('detects README when present at root', async () => {
     const index = makeMockIndex([makeFile('README.md')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const readme = result.checks.find((c) => c.name === 'README');
     expect(readme).toBeDefined();
@@ -64,7 +64,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects README.rst variant', async () => {
     const index = makeMockIndex([makeFile('README.rst')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const readme = result.checks.find((c) => c.name === 'README');
     expect(readme!.present).toBe(true);
@@ -73,7 +73,7 @@ describe('analyzeRepoHealth', () => {
 
   it('does not detect README in subdirectory as root README', async () => {
     const index = makeMockIndex([makeFile('docs/README.md')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const readme = result.checks.find((c) => c.name === 'README');
     expect(readme!.present).toBe(false);
@@ -81,7 +81,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects LICENSE with various names', async () => {
     const index = makeMockIndex([makeFile('LICENCE.md')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const license = result.checks.find((c) => c.name === 'LICENSE');
     expect(license!.present).toBe(true);
@@ -93,7 +93,7 @@ describe('analyzeRepoHealth', () => {
       makeFile('.github/workflows/ci.yml'),
       makeFile('.github/workflows/release.yaml'),
     ]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const ci = result.checks.find((c) => c.name === 'CI Configuration');
     expect(ci!.present).toBe(true);
@@ -104,7 +104,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects GitLab CI', async () => {
     const index = makeMockIndex([makeFile('.gitlab-ci.yml')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const ci = result.checks.find((c) => c.name === 'CI Configuration');
     expect(ci!.present).toBe(true);
@@ -113,7 +113,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects Travis CI', async () => {
     const index = makeMockIndex([makeFile('.travis.yml')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const ci = result.checks.find((c) => c.name === 'CI Configuration');
     expect(ci!.present).toBe(true);
@@ -122,7 +122,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects CircleCI', async () => {
     const index = makeMockIndex([makeFile('.circleci/config.yml')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const ci = result.checks.find((c) => c.name === 'CI Configuration');
     expect(ci!.present).toBe(true);
@@ -131,7 +131,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects Jenkinsfile', async () => {
     const index = makeMockIndex([makeFile('Jenkinsfile')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const ci = result.checks.find((c) => c.name === 'CI Configuration');
     expect(ci!.present).toBe(true);
@@ -142,7 +142,7 @@ describe('analyzeRepoHealth', () => {
       makeFile('.github/workflows/ci.yml'),
       makeFile('.gitlab-ci.yml'),
     ]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const ci = result.checks.find((c) => c.name === 'CI Configuration');
     expect(ci!.present).toBe(true);
@@ -153,7 +153,7 @@ describe('analyzeRepoHealth', () => {
 
   it('reports missing files as present: false', async () => {
     const index = makeMockIndex([makeFile('src/index.ts')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     for (const check of result.checks) {
       expect(check.present).toBe(false);
@@ -163,7 +163,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects Dockerfile anywhere in repo', async () => {
     const index = makeMockIndex([makeFile('infra/deploy/Dockerfile')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const docker = result.checks.find((c) => c.name === 'Dockerfile');
     expect(docker!.present).toBe(true);
@@ -172,7 +172,7 @@ describe('analyzeRepoHealth', () => {
 
   it('detects docker-compose.yml anywhere in repo', async () => {
     const index = makeMockIndex([makeFile('docker-compose.yml')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const docker = result.checks.find((c) => c.name === 'Dockerfile');
     expect(docker!.present).toBe(true);
@@ -192,7 +192,7 @@ describe('analyzeRepoHealth', () => {
       makeFile('CODE_OF_CONDUCT.md'),
       makeFile('CHANGELOG.md'),
     ]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     for (const check of result.checks) {
       expect(check.present).toBe(true);
@@ -201,7 +201,7 @@ describe('analyzeRepoHealth', () => {
 
   it('returns exactly 10 checks', async () => {
     const index = makeMockIndex([]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     expect(result.checks).toHaveLength(10);
     const names = result.checks.map((c) => c.name);
@@ -219,7 +219,7 @@ describe('analyzeRepoHealth', () => {
 
   it('returns computed status and timing', async () => {
     const index = makeMockIndex([]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     expect(result.meta.status).toBe('computed');
     expect(result.meta.durationMs).toBeGreaterThanOrEqual(0);
@@ -227,7 +227,7 @@ describe('analyzeRepoHealth', () => {
 
   it('handles case-insensitive filename matching', async () => {
     const index = makeMockIndex([makeFile('readme.md')]);
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     const readme = result.checks.find((c) => c.name === 'README');
     expect(readme!.present).toBe(true);
@@ -242,7 +242,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeRepoHealth — integration', () => {
   it('detects health files in the codebase_analysis project', async () => {
     const root = path.resolve(import.meta.dirname, '../..');
     const index = await buildRepositoryIndex(root, makeConfig(root));
-    const result = await analyzeRepoHealth(index);
+    const result = analyzeRepoHealth(index);
 
     expect(result.meta.status).toBe('computed');
     expect(result.checks.length).toBeGreaterThan(0);

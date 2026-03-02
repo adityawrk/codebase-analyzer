@@ -53,12 +53,20 @@ function parseGitleaksOutput(stdout: string, repoRoot: string): SecurityFinding[
     return [];
   }
 
-  return raw.map((entry) => ({
-    file: path.relative(repoRoot, entry.File) || entry.File,
-    line: entry.StartLine,
-    ruleId: entry.RuleID,
-    description: entry.Description,
-  }));
+  return raw.map((entry) => {
+    let relFile = path.relative(repoRoot, entry.File) || entry.File;
+    // Prevent leaking operator filesystem paths — if the relative path
+    // escapes the repo root (starts with ..), use just the basename.
+    if (relFile.startsWith('..')) {
+      relFile = path.basename(entry.File);
+    }
+    return {
+      file: relFile,
+      line: entry.StartLine,
+      ruleId: entry.RuleID,
+      description: entry.Description,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

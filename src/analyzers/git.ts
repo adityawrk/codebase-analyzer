@@ -35,7 +35,7 @@ const RECENT_COMMITS_LIMIT = 15;
 const SHORT_MESSAGE_THRESHOLD = 10;
 
 /** Regex patterns for test file paths. */
-const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/)/i;
+const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/|(?:^|\/)tests?\/|(?:^|\/)test_)/i;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -329,8 +329,6 @@ export async function analyzeGit(
     shortlogResult,
     allDatesResult,
     subjectsResult,
-    firstCommitResult,
-    lastCommitResult,
     recentShortlogResult,
     recentCommitsResult,
     allSubjectsResult,
@@ -340,7 +338,7 @@ export async function analyzeGit(
     execTool('git', ['rev-list', '--count', 'HEAD'], { cwd, timeout }),
     // all contributors
     execTool('git', ['shortlog', '-sne', 'HEAD'], { cwd, timeout }),
-    // all commit dates for activeDays + frequency
+    // all commit dates for activeDays + frequency + first/last dates
     execTool('git', ['log', '--format=%aI'], { cwd, timeout }),
     // last N commit subjects for conventional commit %
     execTool(
@@ -348,13 +346,6 @@ export async function analyzeGit(
       ['log', '--format=%s', `-n`, String(CONVENTIONAL_SAMPLE_SIZE)],
       { cwd, timeout },
     ),
-    // first commit date
-    execTool('git', ['log', '--format=%aI', '--reverse', '-n', '1'], {
-      cwd,
-      timeout,
-    }),
-    // last commit date
-    execTool('git', ['log', '--format=%aI', '-n', '1'], { cwd, timeout }),
     // recent contributors (last 12 months) for bus factor
     execTool(
       'git',
@@ -407,13 +398,10 @@ export async function analyzeGit(
     .filter((l) => l.trim().length > 0);
   const conventionalCommitPercent = calculateConventionalPercent(subjects);
 
-  // Parse first/last commit dates
-  const firstCommitDate = firstCommitResult.exitCode === 0
-    ? firstCommitResult.stdout.trim() || null
-    : null;
-  const lastCommitDate = lastCommitResult.exitCode === 0
-    ? lastCommitResult.stdout.trim() || null
-    : null;
+  // Derive first/last commit dates from the full date list.
+  // git log outputs newest-first, so last element = oldest (first) commit.
+  const firstCommitDate: string | null = dateLines.length > 0 ? (dateLines[dateLines.length - 1] ?? null) : null;
+  const lastCommitDate: string | null = dateLines.length > 0 ? (dateLines[0] ?? null) : null;
 
   // Commit frequency
   const commitFrequency = calculateFrequency(

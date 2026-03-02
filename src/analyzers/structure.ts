@@ -85,7 +85,7 @@ function renderChildren(children: FolderNode[], prefix: string, lines: string[])
  * Analyze the folder structure of a repository.
  * Builds a tree from index.files paths (no filesystem access).
  */
-export async function analyzeStructure(index: RepositoryIndex): Promise<StructureResult> {
+export function analyzeStructure(index: RepositoryIndex): StructureResult {
   const start = performance.now();
 
   const repoName = path.basename(index.root);

@@ -61,7 +61,7 @@ const PYTHON_INIT_FILENAMES = ['__init__.py'];
 export async function extractImports(
   source: string,
   language: string,
-  filePath: string,
+  _filePath: string,
 ): Promise<RawImport[]> {
   const tree = await parseSource(source, language);
   if (!tree) return [];

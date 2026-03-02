@@ -3,9 +3,11 @@
 # Build release tarballs for codebase-analyzer distribution.
 #
 # Produces platform-specific tarballs containing:
-#   codebase-analyzer          (compiled bun binary)
-#   wasm/tree-sitter.wasm      (web-tree-sitter runtime)
-#   wasm/tree-sitter-*.wasm    (per-language grammar files)
+#   codebase-analyzer              (compiled bun binary)
+#   wasm/tree-sitter.wasm          (web-tree-sitter runtime)
+#   wasm/tree-sitter-*.wasm        (per-language grammar files)
+#   rubric.yaml                    (default scoring rubric)
+#   data/package-purposes.json     (package purpose lookup table)
 #
 # Usage:
 #   ./scripts/build-release.sh                  # Build for current platform
@@ -190,7 +192,7 @@ for target in "${TARGETS[@]}"; do
   # Staging directory for this target's tarball contents
   STAGE_DIR="$RELEASE_DIR/.stage-${target}"
   rm -rf "$STAGE_DIR"
-  mkdir -p "$STAGE_DIR/wasm"
+  mkdir -p "$STAGE_DIR/wasm" "$STAGE_DIR/data"
 
   # Compile binary
   BINARY_PATH="$STAGE_DIR/codebase-analyzer"
@@ -204,12 +206,16 @@ for target in "${TARGETS[@]}"; do
   # Copy WASM files
   cp "$WASM_STAGING"/*.wasm "$STAGE_DIR/wasm/"
 
+  # Copy rubric and data files
+  cp "$PROJECT_ROOT/rubric.yaml" "$STAGE_DIR/"
+  cp "$PROJECT_ROOT/data/package-purposes.json" "$STAGE_DIR/data/"
+
   # Create tarball
   TARBALL_NAME="codebase-analyzer-${target}.tar.gz"
   TARBALL_PATH="$RELEASE_DIR/$TARBALL_NAME"
 
   echo "    Packaging $TARBALL_NAME..."
-  tar -czf "$TARBALL_PATH" -C "$STAGE_DIR" codebase-analyzer wasm/
+  tar -czf "$TARBALL_PATH" -C "$STAGE_DIR" codebase-analyzer wasm/ rubric.yaml data/
 
   # Record artifact info
   BINARY_SIZE=$(du -h "$BINARY_PATH" | cut -f1)

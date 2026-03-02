@@ -225,7 +225,7 @@ export async function isBinary(filePath: string): Promise<boolean> {
  */
 function globToRegex(pattern: string): RegExp {
   // Normalize to forward slashes
-  let p = pattern.replace(/\\/g, '/');
+  const p = pattern.replace(/\\/g, '/');
 
   // Escape regex-special characters except * and ?
   let regex = '';

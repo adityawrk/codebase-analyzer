@@ -453,10 +453,12 @@ function formatGodFiles(report: ReportData): string[] {
   }
 
   const lines: string[] = [];
-  lines.push('## God Files (>500 LOC)');
+  lines.push('## God Files (>500 Code Lines)');
   lines.push('');
-  lines.push('| File | Lines | Language |');
-  lines.push('|------|-------|----------|');
+  lines.push('Files exceeding 500 lines of code (blanks and comments excluded).');
+  lines.push('');
+  lines.push('| File | Code Lines | Language |');
+  lines.push('|------|------------|----------|');
   const sorted = [...report.sizing.godFiles].sort((a, b) => b.lines - a.lines);
   for (const f of sorted) {
     lines.push(`| ${f.path} | ${f.lines} | ${f.language} |`);
@@ -576,10 +578,12 @@ function formatLargestFiles(report: ReportData): string[] {
   }
 
   const lines: string[] = [];
-  lines.push('## Largest Files');
+  lines.push('## Largest Files (Total Lines)');
   lines.push('');
-  lines.push('| File | Lines |');
-  lines.push('|------|-------|');
+  lines.push('Files with the most total lines (including blanks, comments, and code).');
+  lines.push('');
+  lines.push('| File | Total Lines |');
+  lines.push('|------|-------------|');
   for (const f of report.sizing.largestFiles) {
     lines.push(`| \`${f.path}\` | ${f.lines} |`);
   }

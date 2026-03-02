@@ -78,7 +78,7 @@ function makeMockIndex(
 describe('analyzeTechStack — unit', () => {
   it('returns computed status for empty index', async () => {
     const index = makeMockIndex([]);
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     expect(result.meta.status).toBe('computed');
     expect(result.meta.durationMs).toBeGreaterThanOrEqual(0);
@@ -90,7 +90,7 @@ describe('analyzeTechStack — unit', () => {
     const langMap = new Map<string, FileEntry[]>([['TypeScript', tsFiles]]);
     const index = makeMockIndex(tsFiles, [], langMap);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     expect(result.meta.status).toBe('computed');
     const ts = result.stack.find((e) => e.name === 'TypeScript');
@@ -103,7 +103,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('Dockerfile')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const docker = result.stack.find((e) => e.name === 'Docker');
     expect(docker).toBeDefined();
@@ -117,7 +117,7 @@ describe('analyzeTechStack — unit', () => {
     ];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const ghActions = result.stack.find((e) => e.name === 'GitHub Actions');
     expect(ghActions).toBeDefined();
@@ -128,7 +128,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('docker-compose.yml')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const compose = result.stack.find((e) => e.name === 'Docker Compose');
     expect(compose).toBeDefined();
@@ -139,7 +139,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('.eslintrc.json')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const eslint = result.stack.find((e) => e.name === 'ESLint');
     expect(eslint).toBeDefined();
@@ -150,7 +150,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('eslint.config.mjs')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const eslint = result.stack.find((e) => e.name === 'ESLint');
     expect(eslint).toBeDefined();
@@ -160,7 +160,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('.prettierrc')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const prettier = result.stack.find((e) => e.name === 'Prettier');
     expect(prettier).toBeDefined();
@@ -171,7 +171,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('biome.json')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const biome = result.stack.find((e) => e.name === 'Biome');
     expect(biome).toBeDefined();
@@ -182,7 +182,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('tailwind.config.ts')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const tw = result.stack.find((e) => e.name === 'Tailwind CSS');
     expect(tw).toBeDefined();
@@ -197,7 +197,7 @@ describe('analyzeTechStack — unit', () => {
     ];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const names = result.stack.map((e) => e.name);
     const uniqueNames = new Set(names);
@@ -215,7 +215,7 @@ describe('analyzeTechStack — unit', () => {
     ]);
     const index = makeMockIndex(files, [], langMap);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     for (const entry of result.stack) {
       expect(typeof entry.name).toBe('string');
@@ -239,7 +239,7 @@ describe('analyzeTechStack — unit', () => {
     ]);
     const index = makeMockIndex(files, [], langMap);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const categoryOrder = [
       'language-tool',
@@ -275,7 +275,7 @@ describe('analyzeTechStack — unit', () => {
     const files = [makeFile('.gitlab-ci.yml')];
     const index = makeMockIndex(files);
 
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const gitlab = result.stack.find((e) => e.name === 'GitLab CI');
     expect(gitlab).toBeDefined();
@@ -296,7 +296,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('returns computed status for the codebase_analysis project', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     expect(result.meta.status).toBe('computed');
     expect(result.meta.durationMs).toBeGreaterThanOrEqual(0);
@@ -304,7 +304,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('detects TypeScript as a language tool', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const ts = result.stack.find((e) => e.name === 'TypeScript');
     expect(ts).toBeDefined();
@@ -313,7 +313,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('detects vitest as test-runner', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const vitest = result.stack.find((e) => e.name === 'Vitest');
     expect(vitest).toBeDefined();
@@ -322,7 +322,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('detects Commander from npm dependencies', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const commander = result.stack.find((e) => e.name === 'Commander');
     expect(commander).toBeDefined();
@@ -331,7 +331,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('has no duplicate entries', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     const names = result.stack.map((e) => e.name);
     const uniqueNames = new Set(names);
@@ -340,7 +340,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('every entry has name, category, and source', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     expect(result.stack.length).toBeGreaterThan(0);
 
@@ -355,7 +355,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
 
   it('detects multiple technologies from package.json', async () => {
     const index = await buildTestIndex();
-    const result = await analyzeTechStack(index);
+    const result = analyzeTechStack(index);
 
     // This project has commander, vitest, typescript, yaml at minimum
     const fromPkg = result.stack.filter((e) => e.source.includes('package.json'));

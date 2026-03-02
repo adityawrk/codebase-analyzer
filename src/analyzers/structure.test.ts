@@ -52,7 +52,7 @@ describe('analyzeStructure', () => {
       'package.json',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     expect(result.meta.status).toBe('computed');
     expect(result.meta.durationMs).toBeGreaterThanOrEqual(0);
@@ -89,7 +89,7 @@ describe('analyzeStructure', () => {
       'README.md',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
     const lines = result.treeString.split('\n');
 
     // First line is the repo name
@@ -127,7 +127,7 @@ describe('analyzeStructure', () => {
       'z/file.ts',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
     const lines = result.treeString.split('\n');
 
     // Expected output:
@@ -150,7 +150,7 @@ describe('analyzeStructure', () => {
   it('handles empty file list', async () => {
     const index = mockIndex('/repo/empty-project', []);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     expect(result.meta.status).toBe('computed');
     expect(result.tree.name).toBe('empty-project');
@@ -169,7 +169,7 @@ describe('analyzeStructure', () => {
       'tsconfig.json',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     expect(result.tree.name).toBe('flat-project');
     expect(result.tree.fileCount).toBe(4);
@@ -191,7 +191,7 @@ describe('analyzeStructure', () => {
       'src/lib/deep/z.ts',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     // Root has 2 direct files
     expect(result.tree.fileCount).toBe(2);
@@ -222,7 +222,7 @@ describe('analyzeStructure', () => {
       'src/core/file.ts',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     // Top-level folders should be sorted
     const topNames = result.tree.children.map((c) => c.name);
@@ -242,7 +242,7 @@ describe('analyzeStructure', () => {
       'src/index.ts',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     const topNames = result.tree.children.map((c) => c.name);
     // Dot-prefixed folders sort before regular ones (by localeCompare)
@@ -266,7 +266,7 @@ describe('analyzeStructure', () => {
       'docs/b.md',
     ]);
 
-    const result = await analyzeStructure(index);
+    const result = analyzeStructure(index);
 
     // src has 1 file -> "(1 file)" (singular)
     expect(result.treeString).toContain('src/ (1 file)');
