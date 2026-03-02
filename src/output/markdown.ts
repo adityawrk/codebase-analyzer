@@ -9,6 +9,7 @@
 import * as path from 'node:path';
 import type {
   ReportData,
+  LanguageBreakdown,
   ScoringResult,
   CategoryScore,
 } from '../core/types.js';
@@ -23,6 +24,7 @@ export function formatMarkdown(report: ReportData): string {
     ...formatSummary(report),
     ...formatScoring(report),
     ...formatLanguages(report),
+    ...formatCodeTypeBreakdown(report),
     ...formatStructure(report),
     ...formatTests(report),
     ...formatHealth(report),
@@ -30,8 +32,10 @@ export function formatMarkdown(report: ReportData): string {
     ...formatGodFiles(report),
     ...formatGit(report),
     ...formatDependencies(report),
+    ...formatLargestFiles(report),
     ...formatSecurity(report),
     ...formatTechStack(report),
+    ...formatConfigTooling(report),
     ...formatEnvVars(report),
     ...formatDuplication(report),
     ...formatArchitecture(report),
@@ -150,6 +154,190 @@ function formatLanguages(report: ReportData): string[] {
   }
   lines.push('');
   lines.push(`**Total Lines of Code:** ${report.sizing.totalLines}`);
+  lines.push('');
+
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Code Type Breakdown — heuristic classification by extension / language
+// ---------------------------------------------------------------------------
+
+/**
+ * Extension sets for heuristic code-type classification.
+ * Extensions are lowercase with leading dot. Language names (from scc) are
+ * matched case-insensitively as a fallback when the extension field is empty.
+ */
+const FRONTEND_EXTENSIONS = new Set([
+  '.jsx', '.tsx', '.vue', '.svelte',
+  '.css', '.scss', '.less', '.sass',
+  '.html', '.htm', '.hbs', '.ejs', '.pug', '.styl',
+]);
+
+const INFRA_EXTENSIONS = new Set([
+  '.sh', '.bash', '.zsh', '.dockerfile',
+]);
+
+const INFRA_LANGUAGES = new Set([
+  'shell', 'bash', 'zsh', 'dockerfile', 'makefile',
+]);
+
+const CONFIG_EXTENSIONS = new Set([
+  '.json', '.yaml', '.yml', '.toml', '.xml',
+  '.ini', '.cfg', '.conf', '.env',
+]);
+
+const CONFIG_LANGUAGES = new Set([
+  'json', 'yaml', 'toml', 'xml',
+]);
+
+const DOC_EXTENSIONS = new Set([
+  '.md', '.txt', '.rst', '.adoc', '.tex', '.rtf',
+]);
+
+const DOC_LANGUAGES = new Set([
+  'markdown', 'plain text', 'text', 'license', 'plain',
+  'restructuredtext', 'asciidoc',
+]);
+
+type CodeCategory = 'Frontend' | 'Backend' | 'Infrastructure' | 'Config' | 'Test' | 'Other';
+
+interface CodeTypeBucket {
+  files: number;
+  lines: number;
+}
+
+/**
+ * Classify a single LanguageBreakdown entry into a code-type category.
+ * Uses extension first, then falls back to language name.
+ */
+function classifyLanguageEntry(lang: LanguageBreakdown): CodeCategory {
+  const ext = lang.extension.toLowerCase();
+  const name = lang.language.toLowerCase();
+
+  if (FRONTEND_EXTENSIONS.has(ext)) return 'Frontend';
+  if (INFRA_EXTENSIONS.has(ext) || INFRA_LANGUAGES.has(name)) return 'Infrastructure';
+  if (CONFIG_EXTENSIONS.has(ext) || CONFIG_LANGUAGES.has(name)) return 'Config';
+  if (DOC_EXTENSIONS.has(ext) || DOC_LANGUAGES.has(name)) return 'Other';
+
+  // Everything else is treated as backend/application code
+  return 'Backend';
+}
+
+/**
+ * Determine primary classification label from the largest category.
+ * Returns a string like "Backend Application" or "Frontend Application".
+ */
+function determinePrimaryClassification(
+  buckets: Map<CodeCategory, CodeTypeBucket>,
+  report: ReportData,
+): string {
+  // Find the top language for labelling
+  let topLanguage = '';
+  if (report.sizing.meta.status === 'computed' && report.sizing.languages.length > 0) {
+    const sorted = [...report.sizing.languages].sort((a, b) => b.codeLines - a.codeLines);
+    if (sorted[0]) topLanguage = sorted[0].language;
+  }
+
+  // Find the category with the most lines (excluding Test and Other for primary type)
+  const codeCats: CodeCategory[] = ['Frontend', 'Backend', 'Infrastructure', 'Config'];
+  let primary: CodeCategory = 'Backend';
+  let maxLines = 0;
+  for (const cat of codeCats) {
+    const bucket = buckets.get(cat);
+    if (bucket && bucket.lines > maxLines) {
+      maxLines = bucket.lines;
+      primary = cat;
+    }
+  }
+
+  const suffix = topLanguage ? ` (${topLanguage})` : '';
+
+  switch (primary) {
+    case 'Frontend':
+      return `Frontend Application${suffix}`;
+    case 'Infrastructure':
+      return `Infrastructure/DevOps${suffix}`;
+    case 'Config':
+      return `Configuration-Heavy${suffix}`;
+    default:
+      return `Backend Application${suffix}`;
+  }
+}
+
+function formatCodeTypeBreakdown(report: ReportData): string[] {
+  if (report.sizing.meta.status !== 'computed' || report.sizing.languages.length === 0) {
+    return [];
+  }
+
+  // Step 1: Classify each language entry into a category bucket
+  const buckets = new Map<CodeCategory, CodeTypeBucket>();
+  const allCategories: CodeCategory[] = ['Frontend', 'Backend', 'Infrastructure', 'Config', 'Test', 'Other'];
+  for (const cat of allCategories) {
+    buckets.set(cat, { files: 0, lines: 0 });
+  }
+
+  for (const lang of report.sizing.languages) {
+    const cat = classifyLanguageEntry(lang);
+    const bucket = buckets.get(cat)!;
+    bucket.files += lang.files;
+    bucket.lines += lang.lines;
+  }
+
+  // Step 2: Carve out test files from the backend/frontend buckets.
+  // Test lines are already counted in the language breakdown, so we redistribute
+  // them into the Test bucket to avoid double-counting.
+  if (report.testAnalysis.meta.status === 'computed' && report.testAnalysis.testFiles > 0) {
+    const testBucket = buckets.get('Test')!;
+    testBucket.files = report.testAnalysis.testFiles;
+    testBucket.lines = report.testAnalysis.testLines;
+
+    // Subtract test counts from Backend bucket (most test files are in code languages).
+    // If Backend doesn't have enough, spill into Frontend.
+    let testFilesRemaining = report.testAnalysis.testFiles;
+    let testLinesRemaining = report.testAnalysis.testLines;
+
+    for (const cat of ['Backend', 'Frontend'] as CodeCategory[]) {
+      if (testFilesRemaining <= 0 && testLinesRemaining <= 0) break;
+      const bucket = buckets.get(cat)!;
+
+      const filesToSubtract = Math.min(testFilesRemaining, bucket.files);
+      const linesToSubtract = Math.min(testLinesRemaining, bucket.lines);
+      bucket.files -= filesToSubtract;
+      bucket.lines -= linesToSubtract;
+      testFilesRemaining -= filesToSubtract;
+      testLinesRemaining -= linesToSubtract;
+    }
+  }
+
+  // Step 3: Calculate total lines for percentages
+  const totalLines = Array.from(buckets.values()).reduce((sum, b) => sum + b.lines, 0);
+  if (totalLines === 0) return [];
+
+  // Step 4: Build table rows, sorted by lines descending, omitting zero-line categories
+  const rows = allCategories
+    .map((cat) => ({ category: cat, ...buckets.get(cat)! }))
+    .filter((r) => r.lines > 0)
+    .sort((a, b) => b.lines - a.lines);
+
+  const lines: string[] = [];
+  lines.push('## Code Type Breakdown');
+  lines.push('');
+  lines.push('Analysis of code distribution by type (backend, frontend, shared/config).');
+  lines.push('');
+  lines.push('| Category | Files | Lines | % of Code |');
+  lines.push('|----------|-------|-------|-----------|');
+  for (const row of rows) {
+    const pct = Math.round((row.lines / totalLines) * 100);
+    lines.push(`| ${row.category} | ${row.files} | ${row.lines} | ${pct}% |`);
+  }
+
+  // Step 5: Primary classification sub-section
+  const primaryLabel = determinePrimaryClassification(buckets, report);
+  lines.push('');
+  lines.push('### Primary Classification');
+  lines.push('');
+  lines.push(`This is primarily a **${primaryLabel}** codebase.`);
   lines.push('');
 
   return lines;
@@ -312,6 +500,37 @@ function formatGit(report: ReportData): string[] {
     lines.push('');
   }
 
+  // Recent Commits
+  if (report.git.recentCommits.length > 0) {
+    lines.push('### Recent Commits');
+    lines.push('');
+    lines.push('| Hash | Message | Author | Age |');
+    lines.push('|------|---------|--------|-----|');
+    for (const c of report.git.recentCommits) {
+      lines.push(`| ${c.hash} | ${c.message} | ${c.author} | ${c.date} |`);
+    }
+    lines.push('');
+  }
+
+  // Commit Message Quality
+  lines.push('### Commit Message Quality');
+  lines.push('');
+  lines.push('| Metric | Value |');
+  lines.push('|--------|-------|');
+  lines.push(`| Avg Message Length | ${report.git.avgMessageLength} chars |`);
+  lines.push(`| Very Short Messages (<10 chars) | ${report.git.shortMessageCount} |`);
+  lines.push(`| Conventional Commits | ${report.git.conventionalCommitPercent}% |`);
+  lines.push('');
+
+  // Commits That Include Tests
+  lines.push('### Commits That Include Tests');
+  lines.push('');
+  lines.push('| Metric | Value |');
+  lines.push('|--------|-------|');
+  lines.push(`| Commits Touching Test Files | ${report.git.commitsWithTests} |`);
+  lines.push(`| % of All Commits | ${report.git.commitsWithTestsPercent}% |`);
+  lines.push('');
+
   return lines;
 }
 
@@ -347,6 +566,24 @@ function formatDependencies(report: ReportData): string[] {
     }
     lines.push('');
   }
+
+  return lines;
+}
+
+function formatLargestFiles(report: ReportData): string[] {
+  if (report.sizing.meta.status !== 'computed' || report.sizing.largestFiles.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  lines.push('## Largest Files');
+  lines.push('');
+  lines.push('| File | Lines |');
+  lines.push('|------|-------|');
+  for (const f of report.sizing.largestFiles) {
+    lines.push(`| \`${f.path}\` | ${f.lines} |`);
+  }
+  lines.push('');
 
   return lines;
 }
@@ -392,6 +629,189 @@ function formatTechStack(report: ReportData): string[] {
   const sortedStack = [...report.techStack.stack].sort((a, b) => a.category.localeCompare(b.category));
   for (const entry of sortedStack) {
     lines.push(`| ${entry.name} | ${entry.category} | ${entry.source} |`);
+  }
+  lines.push('');
+
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Configuration & Tooling — combines techStack, repoHealth, and dependencies
+// ---------------------------------------------------------------------------
+
+/**
+ * Config item definition for the Configuration & Tooling table.
+ * Each item maps a display name to a detection strategy using existing report data.
+ */
+interface ConfigItem {
+  /** Display name in the Tool/Config column */
+  label: string;
+  /**
+   * Returns the detected file path/source if found, or null if not found.
+   * Receives the full report to query techStack, repoHealth, dependencies, etc.
+   */
+  detect: (report: ReportData) => string | null;
+}
+
+/** Look up a tech stack entry by name (case-insensitive). */
+function findTechStack(report: ReportData, name: string): string | null {
+  if (report.techStack.meta.status !== 'computed') return null;
+  const entry = report.techStack.stack.find(
+    (e) => e.name.toLowerCase() === name.toLowerCase(),
+  );
+  return entry ? entry.source : null;
+}
+
+/** Look up a repo health check by id. */
+function findHealthCheck(report: ReportData, id: string): string | null {
+  if (report.repoHealth.meta.status !== 'computed') return null;
+  const check = report.repoHealth.checks.find((c) => c.id === id);
+  return check?.present ? (check.path ?? 'detected') : null;
+}
+
+/**
+ * Ordered list of config items to check.
+ * Each entry defines how to detect a tool/config from existing report data.
+ * Items are checked in order and always displayed (found or not found).
+ */
+const CONFIG_ITEMS: ConfigItem[] = [
+  {
+    label: 'Package Manager',
+    detect: (r) => {
+      // Check for any ecosystem manifest via dependencies
+      if (r.dependencies.meta.status === 'computed' && r.dependencies.packageManager) {
+        return r.dependencies.packageManager;
+      }
+      // Fall back to tech stack for ecosystem-level package managers
+      for (const eco of ['npm', 'cargo', 'go', 'python', 'maven', 'gradle']) {
+        const src = findTechStack(r, eco);
+        if (src) return src;
+      }
+      return null;
+    },
+  },
+  {
+    label: 'TypeScript',
+    detect: (r) => findTechStack(r, 'TypeScript'),
+  },
+  {
+    label: 'ESLint',
+    detect: (r) => findTechStack(r, 'ESLint'),
+  },
+  {
+    label: 'Prettier',
+    detect: (r) => findTechStack(r, 'Prettier'),
+  },
+  {
+    label: 'Biome',
+    detect: (r) => findTechStack(r, 'Biome'),
+  },
+  {
+    label: 'Bundler (Vite)',
+    detect: (r) => findTechStack(r, 'Vite'),
+  },
+  {
+    label: 'Bundler (Webpack)',
+    detect: (r) => findTechStack(r, 'Webpack'),
+  },
+  {
+    label: 'Tailwind CSS',
+    detect: (r) => findTechStack(r, 'Tailwind CSS'),
+  },
+  {
+    label: 'Docker',
+    detect: (r) => {
+      const ts = findTechStack(r, 'Docker');
+      if (ts) return ts;
+      return findHealthCheck(r, 'dockerfile');
+    },
+  },
+  {
+    label: 'Docker Compose',
+    detect: (r) => findTechStack(r, 'Docker Compose'),
+  },
+  {
+    label: 'GitHub Actions',
+    detect: (r) => {
+      const ts = findTechStack(r, 'GitHub Actions');
+      if (ts) return ts;
+      // Fall back to repoHealth CI check
+      const ciCheck = findHealthCheck(r, 'ci');
+      return ciCheck;
+    },
+  },
+  {
+    label: 'GitLab CI',
+    detect: (r) => findTechStack(r, 'GitLab CI'),
+  },
+  {
+    label: '.editorconfig',
+    detect: (r) => findHealthCheck(r, 'editorconfig'),
+  },
+];
+
+function formatConfigTooling(report: ReportData): string[] {
+  // Build rows from config items, only including items that are relevant
+  // (detected OR commonly expected for the ecosystem)
+  const rows: Array<{ label: string; detected: boolean; file: string }> = [];
+
+  for (const item of CONFIG_ITEMS) {
+    const result = item.detect(report);
+    rows.push({
+      label: item.label,
+      detected: result !== null,
+      file: result ?? '',
+    });
+  }
+
+  // Filter: only show items that are detected OR are commonly expected.
+  // Remove bundler/CI/tool rows that aren't detected to avoid noise for
+  // ecosystems where they don't apply. Always show: Package Manager,
+  // TypeScript (if TS is in the stack), linters, Docker, CI.
+  const alwaysShow = new Set([
+    'Package Manager',
+    'ESLint',
+    'Prettier',
+    'Docker',
+    '.editorconfig',
+  ]);
+
+  // Show TypeScript row only if TS files exist in the sizing data
+  const hasTypeScript = report.sizing.meta.status === 'computed' &&
+    report.sizing.languages.some((l) => l.language === 'TypeScript');
+  if (hasTypeScript) {
+    alwaysShow.add('TypeScript');
+  }
+
+  // Show at least one CI row — prefer the one that's detected
+  const anyCI = rows.some(
+    (r) => (r.label === 'GitHub Actions' || r.label === 'GitLab CI') && r.detected,
+  );
+  if (!anyCI) {
+    // Show GitHub Actions as the default "not found" CI row
+    alwaysShow.add('GitHub Actions');
+  }
+
+  const filteredRows = rows.filter(
+    (r) => r.detected || alwaysShow.has(r.label),
+  );
+
+  // If nothing is detected at all, skip the section
+  if (filteredRows.every((r) => !r.detected)) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  lines.push('## Configuration & Tooling');
+  lines.push('');
+  lines.push('| Tool/Config | Status | File |');
+  lines.push('|-------------|--------|------|');
+  for (const row of filteredRows) {
+    if (row.detected) {
+      lines.push(`| ${row.label} | \u2705 Configured | ${row.file} |`);
+    } else {
+      lines.push(`| ${row.label} | \u274C Not Found | |`);
+    }
   }
   lines.push('');
 

@@ -143,6 +143,7 @@ describe('analyzeTests — edge cases', () => {
       totalCommentLines: 0,
       languages: [],
       godFiles: [],
+      largestFiles: [],
     };
     const result = await analyzeTests(index, zeroSizing);
 
@@ -164,6 +165,7 @@ describe('analyzeTests — edge cases', () => {
       totalCommentLines: 0,
       languages: [],
       godFiles: [],
+      largestFiles: [],
     };
     const result = await analyzeTests(index, smallSizing);
 

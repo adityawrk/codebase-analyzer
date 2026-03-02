@@ -205,6 +205,39 @@ describe('parseJscpdReportJson — parsing', () => {
     expect(bigClone!.secondFile).toBe('src/utils/helper2.ts');
   });
 
+  it('handles relative paths with ../ prefixes from jscpd', () => {
+    // jscpd sometimes outputs paths relative to its cwd, which can escape the
+    // repo root with ../ prefixes. makeRelative should resolve these against
+    // repoRoot first, then produce clean relative paths.
+    const repoRoot = '/tmp/benchmark-repos/express';
+    const report = {
+      duplicates: [
+        {
+          format: 'javascript',
+          lines: 12,
+          tokens: 90,
+          firstFile: {
+            name: '../../../../tmp/benchmark-repos/express/src/router.js',
+            start: 5,
+            end: 17,
+          },
+          secondFile: {
+            name: '../../../../tmp/benchmark-repos/express/lib/app.js',
+            start: 20,
+            end: 32,
+          },
+        },
+      ],
+      statistics: { total: { lines: 800, duplicatedLines: 12, percentage: '1.5' } },
+    };
+    const result = parseJscpdReportJson(JSON.stringify(report), repoRoot);
+
+    expect(result).not.toBeNull();
+    expect(result!.clones).toHaveLength(1);
+    expect(result!.clones[0]!.firstFile).toBe('src/router.js');
+    expect(result!.clones[0]!.secondFile).toBe('lib/app.js');
+  });
+
   it('handles empty duplicates array', () => {
     const result = parseJscpdReportJson(JSON.stringify(EMPTY_REPORT), '/repo');
 

@@ -85,6 +85,7 @@ const LANGUAGE_TO_EXTENSION: Record<string, string> = {
 
 interface SccFileEntry {
   Filename: string;
+  Location: string;
   Lines: number;
   Code: number;
   Comment: number;
@@ -118,7 +119,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
 
   const result = await execTool(
     'scc',
-    ['--format', 'json', '--no-cocomo', index.root],
+    ['--format', 'json', '--no-cocomo', '--by-file', index.root],
     { timeout: index.config.timeout, cwd: index.root },
   );
 
@@ -137,6 +138,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
       totalCommentLines: 0,
       languages: [],
       godFiles: [],
+      largestFiles: [],
     };
   }
 
@@ -158,6 +160,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
       totalCommentLines: 0,
       languages: [],
       godFiles: [],
+      largestFiles: [],
     };
   }
 
@@ -193,14 +196,25 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
   // Sort by code lines descending
   languages.sort((a, b) => b.codeLines - a.codeLines);
 
-  // Identify god files
+  // Collect all files with their line counts
+  const allFiles: GodFile[] = [];
   const godFiles: GodFile[] = [];
   for (const lang of sccData) {
     if (!lang.Files) continue;
     for (const file of lang.Files) {
+      // scc --by-file puts absolute paths in Location; compute relative path
+      const relPath = file.Location
+        ? path.relative(index.root, file.Location)
+        : file.Filename;
+      const entry: GodFile = {
+        path: relPath,
+        lines: file.Lines,
+        language: lang.Name,
+      };
+      allFiles.push(entry);
       if (file.Code > GOD_FILE_THRESHOLD) {
         godFiles.push({
-          path: file.Filename,
+          path: relPath,
           lines: file.Code,
           language: lang.Name,
         });
@@ -210,6 +224,10 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
 
   // Sort god files by lines descending
   godFiles.sort((a, b) => b.lines - a.lines);
+
+  // Top 15 largest files by total line count
+  allFiles.sort((a, b) => b.lines - a.lines);
+  const largestFiles = allFiles.slice(0, 15);
 
   const elapsed = performance.now() - start;
   return {
@@ -221,6 +239,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
     totalCommentLines,
     languages,
     godFiles,
+    largestFiles,
   };
 }
 
@@ -249,6 +268,7 @@ async function analyzeSizingFallback(index: RepositoryIndex): Promise<SizingResu
   const start = performance.now();
 
   const languageMap = new Map<string, { files: number; lines: number; extension: string }>();
+  const allFiles: GodFile[] = [];
   const godFiles: GodFile[] = [];
 
   let totalFiles = 0;
@@ -262,6 +282,13 @@ async function analyzeSizingFallback(index: RepositoryIndex): Promise<SizingResu
 
     totalFiles++;
     totalLines += lines;
+
+    // Track all files for largest-files list
+    allFiles.push({
+      path: file.path,
+      lines,
+      language: file.language,
+    });
 
     // Accumulate per-language
     const entry = languageMap.get(file.language);
@@ -306,6 +333,10 @@ async function analyzeSizingFallback(index: RepositoryIndex): Promise<SizingResu
   languages.sort((a, b) => b.codeLines - a.codeLines);
   godFiles.sort((a, b) => b.lines - a.lines);
 
+  // Top 15 largest files by total line count
+  allFiles.sort((a, b) => b.lines - a.lines);
+  const largestFiles = allFiles.slice(0, 15);
+
   const elapsed = performance.now() - start;
   return {
     meta: {
@@ -320,6 +351,7 @@ async function analyzeSizingFallback(index: RepositoryIndex): Promise<SizingResu
     totalCommentLines: 0,
     languages,
     godFiles,
+    largestFiles,
   };
 }
 

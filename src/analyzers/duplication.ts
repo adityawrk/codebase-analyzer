@@ -181,13 +181,16 @@ function parseJscpdReport(
 
 /**
  * Make a file path relative to the repo root.
- * Handles both absolute paths and paths already relative.
+ *
+ * Handles both absolute paths and relative paths that may escape the repo root
+ * (e.g. `../../../../tmp/benchmark-repos/express/src/foo.ts` from jscpd when
+ * it outputs paths relative to its working directory rather than absolute).
  */
 function makeRelative(filePath: string, repoRoot: string): string {
-  if (path.isAbsolute(filePath)) {
-    return path.relative(repoRoot, filePath) || filePath;
-  }
-  return filePath;
+  const absolute = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(repoRoot, filePath);
+  return path.relative(repoRoot, absolute) || filePath;
 }
 
 // ---------------------------------------------------------------------------

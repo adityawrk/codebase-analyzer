@@ -58,6 +58,7 @@ function emptySizing(): SizingResult {
     totalCommentLines: 0,
     languages: [],
     godFiles: [],
+    largestFiles: [],
   };
 }
 
@@ -112,6 +113,11 @@ function emptyGit(): GitAnalysisResult {
     conventionalCommitPercent: 0,
     busFactor: 0,
     commitFrequency: { commitsPerWeek: 0, commitsPerMonth: 0 },
+    recentCommits: [],
+    avgMessageLength: 0,
+    shortMessageCount: 0,
+    commitsWithTests: 0,
+    commitsWithTestsPercent: 0,
   };
 }
 

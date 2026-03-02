@@ -95,6 +95,7 @@ function makeFullReport(overrides?: Partial<{
       totalCommentLines,
       languages: [],
       godFiles,
+      largestFiles: [],
     },
     structure: {
       meta: makeMeta(o.structureStatus),
@@ -138,6 +139,11 @@ function makeFullReport(overrides?: Partial<{
       conventionalCommitPercent: 80,
       busFactor: 3,
       commitFrequency: { commitsPerWeek: 5, commitsPerMonth: 20 },
+      recentCommits: [],
+      avgMessageLength: 40,
+      shortMessageCount: 5,
+      commitsWithTests: 100,
+      commitsWithTestsPercent: 20,
     },
     dependencies: {
       meta: makeMeta(),
