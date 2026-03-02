@@ -364,6 +364,9 @@ export interface ReportMeta {
   analyzerVersion: string;
   directory: string;
   analysisCompleteness: number;
+  grade?: string;
+  score?: number;
+  durationMs?: number;
 }
 
 export interface ReportData {
@@ -380,4 +383,28 @@ export interface ReportData {
   envVars: EnvVarsResult;
   duplication: DuplicationResult;
   architecture: ArchitectureResult;
+  scoring?: ScoringResult;
+}
+
+// -- Scoring --
+
+export interface MetricScore {
+  score: number;
+  maxScore: number;
+  label: string;
+  value: unknown;
+}
+
+export interface CategoryScore {
+  score: number;
+  maxScore: number;
+  metrics: Record<string, MetricScore>;
+}
+
+export interface ScoringResult {
+  totalScore: number;
+  totalPossible: number;
+  normalizedScore: number;
+  grade: string;
+  categories: Record<string, CategoryScore>;
 }
