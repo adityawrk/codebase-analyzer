@@ -284,10 +284,12 @@ export async function analyzeTests(
     const coverageConfigFound = await detectCoverageConfig(index);
 
     // --- Calculate test:code ratio ---
-    const codeLines = sizing.totalCodeLines;
-    const denominator = codeLines - testLines;
-    const testCodeRatio = denominator > 0
-      ? Math.round((testLines / denominator) * 10000) / 100
+    // codeLines = non-test total lines (all lines, not just code-only from scc)
+    const totalLines = sizing.totalLines;
+    const codeLines = totalLines > testLines ? totalLines - testLines : 0;
+    // Ratio = percentage of total lines that are test lines (reference-compatible)
+    const testCodeRatio = totalLines > 0
+      ? Math.round((testLines / totalLines) * 10000) / 100
       : 0;
 
     const durationMs = performance.now() - start;

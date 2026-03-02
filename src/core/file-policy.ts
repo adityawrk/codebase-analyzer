@@ -127,32 +127,44 @@ function detectLanguageForFile(relativePath: string): string {
 // Test file detection
 // ---------------------------------------------------------------------------
 
+/** Extensions considered "code" for directory-based test detection. */
+const CODE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.go', '.rs', '.java', '.kt', '.rb', '.swift',
+  '.c', '.cpp', '.cc', '.h', '.hpp', '.cs', '.php', '.dart',
+  '.scala', '.clj', '.ex', '.exs', '.erl', '.hs', '.lua', '.r',
+  '.vue', '.svelte',
+]);
+
 /** Return true if the file path looks like a test file. */
 export function isTestFile(filePath: string): boolean {
   const basename = path.basename(filePath);
   const normalized = filePath.replace(/\\/g, '/');
+  const ext = path.extname(basename).toLowerCase();
 
-  // Directory-based detection
-  const testDirPatterns = [
-    '/__tests__/',
-    '/test/',
-    '/tests/',
-    '/spec/',
-  ];
-  for (const pattern of testDirPatterns) {
-    if (normalized.includes(pattern)) return true;
-  }
-  // Also match if the path STARTS with a test directory (no leading /)
-  if (
-    normalized.startsWith('__tests__/') ||
-    normalized.startsWith('test/') ||
-    normalized.startsWith('tests/') ||
-    normalized.startsWith('spec/')
-  ) {
-    return true;
+  // Directory-based detection — only for code files (not .md, .json, .yaml, etc.)
+  if (CODE_EXTENSIONS.has(ext)) {
+    const testDirPatterns = [
+      '/__tests__/',
+      '/test/',
+      '/tests/',
+      '/spec/',
+    ];
+    for (const pattern of testDirPatterns) {
+      if (normalized.includes(pattern)) return true;
+    }
+    // Also match if the path STARTS with a test directory (no leading /)
+    if (
+      normalized.startsWith('__tests__/') ||
+      normalized.startsWith('test/') ||
+      normalized.startsWith('tests/') ||
+      normalized.startsWith('spec/')
+    ) {
+      return true;
+    }
   }
 
-  // File-name pattern detection
+  // File-name pattern detection (any extension)
   // *.test.*, *.spec.*, *_test.*, *_spec.*
   const nameWithoutExt = basename.replace(/\.[^.]+$/, '');
   if (

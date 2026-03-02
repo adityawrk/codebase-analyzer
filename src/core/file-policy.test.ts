@@ -193,6 +193,20 @@ describe('isTestFile', () => {
       expect(isTestFile('src/testing-utils.ts')).toBe(false);
       expect(isTestFile('src/contest.py')).toBe(false);
     });
+
+    it('does not flag non-code files in test directories', () => {
+      expect(isTestFile('spec/metrics-v1.md')).toBe(false);
+      expect(isTestFile('tests/fixtures/benchmark-manifest.json')).toBe(false);
+      expect(isTestFile('tests/README.md')).toBe(false);
+      expect(isTestFile('test/data.yaml')).toBe(false);
+      expect(isTestFile('__tests__/snapshot.json')).toBe(false);
+    });
+
+    it('still flags code files in test directories', () => {
+      expect(isTestFile('spec/app.spec.ts')).toBe(true);
+      expect(isTestFile('tests/helper.ts')).toBe(true);
+      expect(isTestFile('__tests__/util.py')).toBe(true);
+    });
   });
 
   describe('path normalization', () => {

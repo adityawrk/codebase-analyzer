@@ -107,11 +107,20 @@ describe('analyzeTests', () => {
     }
   });
 
-  it('codeLines matches sizing.totalCodeLines', async () => {
+  it('codeLines equals totalLines minus testLines', async () => {
     const index = await buildTestIndex();
     const sizing = await analyzeSizing(index);
     const result = await analyzeTests(index, sizing);
 
-    expect(result.codeLines).toBe(sizing.totalCodeLines);
+    expect(result.codeLines).toBe(sizing.totalLines - result.testLines);
+  });
+
+  it('testCodeRatio <= 100 (percentage of total lines)', async () => {
+    const index = await buildTestIndex();
+    const sizing = await analyzeSizing(index);
+    const result = await analyzeTests(index, sizing);
+
+    expect(result.testCodeRatio).toBeLessThanOrEqual(100);
+    expect(result.testCodeRatio).toBeGreaterThan(0);
   });
 });
