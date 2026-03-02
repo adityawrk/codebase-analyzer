@@ -12,6 +12,7 @@ import { analyzeEnvVars, extractEnvVarsFromSource, extractPrefix } from './env-v
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import { DEFAULT_CONFIG } from '../core/types.js';
 import type { AnalysisConfig, FileEntry, RepositoryIndex, GitMeta } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -407,7 +408,7 @@ describe('analyzeEnvVars', () => {
 // Integration test against the actual codebase_analysis project
 // ---------------------------------------------------------------------------
 
-describe('analyzeEnvVars — integration', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeEnvVars — integration', () => {
   it('produces a valid result for the codebase_analysis project', async () => {
     const root = path.resolve(import.meta.dirname, '../..');
     const index = await buildRepositoryIndex(root, makeConfig(root));

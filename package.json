@@ -1,12 +1,25 @@
 {
   "name": "codebase-analyzer",
   "version": "0.1.0",
-  "description": "Self-hosted static analysis CLI for codebase reports",
+  "description": "Self-hosted static analysis CLI that produces codebase analysis reports without LLM dependency. Orchestrates scc, jscpd, gitleaks, and tree-sitter AST parsing to compute static metrics with scored markdown/JSON output.",
   "type": "module",
-  "private": true,
+  "main": "./dist/core/orchestrator.js",
+  "types": "./dist/core/orchestrator.d.ts",
   "bin": {
     "codebase-analyzer": "./dist/cli/index.js"
   },
+  "files": [
+    "dist/",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.js.map",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.d.ts.map",
+    "!dist/codebase-analyzer",
+    "!dist/wasm/",
+    "rubric.yaml",
+    "schemas/",
+    "data/"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli/index.ts",
@@ -15,7 +28,36 @@
     "test:coverage": "vitest run --coverage",
     "test:golden": "vitest run tests/golden/",
     "update-golden": "UPDATE_GOLDEN=1 vitest run tests/golden/",
-    "build:binary": "bash scripts/build-binary.sh"
+    "build:binary": "bash scripts/build-binary.sh",
+    "lint": "eslint src/",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "codebase-analysis",
+    "static-analysis",
+    "code-quality",
+    "code-metrics",
+    "cli",
+    "tree-sitter",
+    "complexity",
+    "duplication",
+    "security",
+    "scoring"
+  ],
+  "author": "Aditya Patni <adityapatni2106@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adityawrk/codebase-analyzer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adityawrk/codebase-analyzer/issues"
+  },
+  "homepage": "https://github.com/adityawrk/codebase-analyzer#readme",
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "commander": "^14.0.3",
@@ -24,12 +66,17 @@
     "yaml": "^2.8.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.3.3",
     "@vitest/coverage-v8": "^4.0.18",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
   }
 }

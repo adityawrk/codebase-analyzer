@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { analyzeSizing } from './sizing.js';
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import type { AnalysisConfig } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 /**
  * Build a RepositoryIndex for the codebase_analysis project itself.
@@ -24,7 +25,7 @@ async function buildTestIndex() {
   return buildRepositoryIndex(root, config);
 }
 
-describe('analyzeSizing', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeSizing', () => {
   it('produces a valid SizingResult with totalFiles > 0', async () => {
     const index = await buildTestIndex();
     const result = await analyzeSizing(index);

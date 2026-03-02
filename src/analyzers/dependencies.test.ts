@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { analyzeDependencies } from './dependencies.js';
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import type { AnalysisConfig } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 /**
  * Build a RepositoryIndex for the codebase_analysis project itself.
@@ -24,7 +25,7 @@ async function buildTestIndex() {
   return buildRepositoryIndex(root, config);
 }
 
-describe('analyzeDependencies', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeDependencies', () => {
   it('returns meta.status = computed', async () => {
     const index = await buildTestIndex();
     const result = await analyzeDependencies(index);

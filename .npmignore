@@ -1,0 +1,61 @@
+# Source (dist/ is what gets published)
+src/
+tests/
+spec/
+scripts/
+
+# Config files
+tsconfig.json
+vitest.config.*
+.eslintrc*
+eslint.config.*
+.prettierrc*
+.prettierignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Claude/AI config
+.claude/
+CLAUDE.md
+REVISED-PLAN.md
+MEMORY.md
+
+# Dev artifacts
+coverage/
+*.tsbuildinfo
+*.lcov
+*.tgz
+
+# Env files
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Benchmark/fixture repos (large)
+tests/
+benchmarks/
+
+# Editor config
+.idea/
+.vscode/
+
+# bun lock (consumers use npm)
+bun.lock
+bun.lockb
+
+# Compiled test files (not needed in published package)
+dist/**/*.test.js
+dist/**/*.test.js.map
+dist/**/*.test.d.ts
+dist/**/*.test.d.ts.map
+
+# Bun-compiled standalone binary (61MB, not for npm)
+dist/codebase-analyzer
+
+# Copied WASM files (resolved from node_modules at runtime)
+dist/wasm/

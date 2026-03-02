@@ -11,6 +11,7 @@ import type {
   RepositoryIndex,
   TechStackEntry,
 } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -286,7 +287,7 @@ describe('analyzeTechStack — unit', () => {
 // Integration test against the actual codebase_analysis project
 // ---------------------------------------------------------------------------
 
-describe('analyzeTechStack — integration', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeTechStack — integration', () => {
   async function buildTestIndex(): Promise<RepositoryIndex> {
     const root = path.resolve(import.meta.dirname, '../..');
     const config = makeConfig(root);

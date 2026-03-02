@@ -9,9 +9,12 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { computeFileComplexity } from './complexity.js';
 import { initTreeSitter } from '../utils/tree-sitter.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 beforeAll(async () => {
-  await initTreeSitter();
+  if (process.env.VITEST === 'true') {
+    await initTreeSitter();
+  }
 });
 
 /**
@@ -24,7 +27,7 @@ async function getFirstFunctionComplexity(source: string): Promise<number> {
   return result.functions[0]!.complexity;
 }
 
-describe('McCabe cyclomatic complexity', () => {
+describe.skipIf(SKIP_NON_VITEST)('McCabe cyclomatic complexity', () => {
   // ── Test 1: Trivial function ─────────────────────────────────────
 
   it('scores 1 for a simple function with no branches', async () => {
@@ -206,7 +209,7 @@ function classify(x: number) {
   });
 });
 
-describe('nested function handling', () => {
+describe.skipIf(SKIP_NON_VITEST)('nested function handling', () => {
   it('counts inner function decision points separately from outer', async () => {
     const source = `
 function outer(x: number) {
@@ -234,7 +237,7 @@ function outer(x: number) {
   });
 });
 
-describe('function name extraction', () => {
+describe.skipIf(SKIP_NON_VITEST)('function name extraction', () => {
   it('extracts names from various function forms', async () => {
     const source = `
 function named() {}
@@ -267,7 +270,7 @@ const obj = {
   });
 });
 
-describe('FileComplexity aggregation', () => {
+describe.skipIf(SKIP_NON_VITEST)('FileComplexity aggregation', () => {
   it('computes correct avg and max across multiple functions', async () => {
     const source = `
 function simple() { return 1; }
@@ -294,7 +297,7 @@ function branchy(x: number) {
   });
 });
 
-describe('line number extraction', () => {
+describe.skipIf(SKIP_NON_VITEST)('line number extraction', () => {
   it('reports 1-based line numbers', async () => {
     const source = `
 function first() {}
@@ -322,7 +325,7 @@ async function getFirstPythonFunctionComplexity(source: string): Promise<number>
   return result.functions[0]!.complexity;
 }
 
-describe('Python complexity', () => {
+describe.skipIf(SKIP_NON_VITEST)('Python complexity', () => {
   it('scores 1 for a simple Python function with no branches', async () => {
     const source = `
 def hello():
@@ -462,7 +465,7 @@ async function getFirstGoFunctionComplexity(source: string): Promise<number> {
   return result.functions[0]!.complexity;
 }
 
-describe('Go complexity', () => {
+describe.skipIf(SKIP_NON_VITEST)('Go complexity', () => {
   it('scores 1 for a simple Go function with no branches', async () => {
     const source = `
 package main

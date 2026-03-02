@@ -4,6 +4,7 @@ import { analyzeGit } from './git.js';
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import { DEFAULT_CONFIG } from '../core/types.js';
 import type { AnalysisConfig, FileEntry, RepositoryIndex, GitMeta } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,7 +70,7 @@ describe('analyzeGit — non-git repo', () => {
 // Integration tests: run against the codebase_analysis repo itself
 // ---------------------------------------------------------------------------
 
-describe('analyzeGit — integration', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeGit — integration', () => {
   it('returns computed status for a git repo', async () => {
     const index = await buildTestIndex();
     const result = await analyzeGit(index);

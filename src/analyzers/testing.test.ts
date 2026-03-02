@@ -10,6 +10,7 @@ import { analyzeTests } from './testing.js';
 import { analyzeSizing } from './sizing.js';
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import type { AnalysisConfig } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 /**
  * Build a RepositoryIndex for the codebase_analysis project itself.
@@ -30,7 +31,7 @@ async function buildTestIndex() {
   return buildRepositoryIndex(root, config);
 }
 
-describe('analyzeTests', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeTests', () => {
   it('detects vitest as a test framework', async () => {
     const index = await buildTestIndex();
     const sizing = await analyzeSizing(index);
@@ -130,7 +131,7 @@ describe('analyzeTests', () => {
 // Edge cases with synthetic sizing data
 // ---------------------------------------------------------------------------
 
-describe('analyzeTests — edge cases', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeTests — edge cases', () => {
   it('testCodeRatio is 0 when totalLines is 0', async () => {
     const index = await buildTestIndex();
     // Create a sizing result that reports 0 total lines (e.g. scc returned nothing)

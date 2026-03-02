@@ -4,6 +4,7 @@ import { analyzeRepoHealth } from './repo-health.js';
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import { DEFAULT_CONFIG } from '../core/types.js';
 import type { AnalysisConfig, FileEntry, RepositoryIndex, GitMeta } from '../core/types.js';
+import { SKIP_NON_VITEST } from '../test-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -237,7 +238,7 @@ describe('analyzeRepoHealth', () => {
 // Integration test against the actual codebase_analysis project
 // ---------------------------------------------------------------------------
 
-describe('analyzeRepoHealth — integration', () => {
+describe.skipIf(SKIP_NON_VITEST)('analyzeRepoHealth — integration', () => {
   it('detects health files in the codebase_analysis project', async () => {
     const root = path.resolve(import.meta.dirname, '../..');
     const index = await buildRepositoryIndex(root, makeConfig(root));
