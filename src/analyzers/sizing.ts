@@ -77,6 +77,22 @@ const LANGUAGE_TO_EXTENSION: Record<string, string> = {
   Text: '.txt',
   License: '',
   gitignore: '',
+  'Properties File': '.properties',
+  Batch: '.bat',
+  CSV: '.csv',
+  SVG: '.svg',
+  ProGuard: '.pro',
+  Gradle: '.gradle',
+  Fish: '.fish',
+  'Module-Definition': '.def',
+  Autoconf: '.ac',
+  m4: '.m4',
+  Systemd: '.service',
+  TCL: '.tcl',
+  MSBuild: '.csproj',
+  CMake: '.cmake',
+  Perl: '.pl',
+  Groovy: '.groovy',
 };
 
 // ---------------------------------------------------------------------------
@@ -105,6 +121,13 @@ interface SccLanguageEntry {
 // ---------------------------------------------------------------------------
 // Extension lookup helper
 // ---------------------------------------------------------------------------
+
+/** Languages that should be excluded from god-file detection (non-code). */
+const NON_CODE_SCC_LANGUAGES = new Set([
+  'Markdown', 'JSON', 'YAML', 'TOML', 'XML', 'Plain Text', 'Text',
+  'License', 'gitignore', 'SVG', 'CSV', 'Properties File', 'Batch',
+  'INI', 'Plain',
+]);
 
 function extensionForLanguage(languageName: string): string {
   return LANGUAGE_TO_EXTENSION[languageName] ?? '';
@@ -164,6 +187,18 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
     };
   }
 
+  // Contextual language overrides — rename misidentified languages
+  // when project context provides strong signals.
+  const hasJvmSignals = sccData.some((l) =>
+    l.Name === 'Kotlin' || l.Name === 'Java' || l.Name === 'Gradle' || l.Name === 'Groovy',
+  );
+  for (const lang of sccData) {
+    // scc reports .pro files as "Prolog" — in Android/JVM projects these are ProGuard configs
+    if (lang.Name === 'Prolog' && hasJvmSignals) {
+      lang.Name = 'ProGuard';
+    }
+  }
+
   // Accumulate totals
   let totalFiles = 0;
   let totalLines = 0;
@@ -212,7 +247,8 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
         language: lang.Name,
       };
       allFiles.push(entry);
-      if (file.Code > GOD_FILE_THRESHOLD) {
+      // Skip non-code languages (Markdown, JSON, etc.) for god-file detection
+      if (!NON_CODE_SCC_LANGUAGES.has(lang.Name) && file.Code > GOD_FILE_THRESHOLD) {
         godFiles.push({
           path: relPath,
           lines: file.Code,

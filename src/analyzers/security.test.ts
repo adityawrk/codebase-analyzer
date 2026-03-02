@@ -180,6 +180,7 @@ describe('analyzeSecurity — findings parsing', () => {
       line: 15,
       ruleId: 'aws-access-key-id',
       description: 'AWS Access Key',
+      context: 'production',
     });
 
     // Second finding
@@ -188,6 +189,7 @@ describe('analyzeSecurity — findings parsing', () => {
       line: 3,
       ruleId: 'generic-api-key',
       description: 'Generic API Key',
+      context: 'production',
     });
   });
 
@@ -211,7 +213,7 @@ describe('analyzeSecurity — findings parsing', () => {
     // Verify that each finding only has the allowed fields
     for (const finding of result.findings) {
       const keys = Object.keys(finding);
-      expect(keys).toEqual(['file', 'line', 'ruleId', 'description']);
+      expect(keys).toEqual(['file', 'line', 'ruleId', 'description', 'context']);
     }
   });
 

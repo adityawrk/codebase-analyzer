@@ -18,6 +18,7 @@ import { parseNpmManifest } from './adapters/npm-adapter.js';
 import { parseCargoManifest } from './adapters/cargo-adapter.js';
 import { parseGoMod } from './adapters/go-adapter.js';
 import { parsePythonRequirements } from './adapters/pypi-adapter.js';
+import { parseGradleManifest } from './adapters/gradle-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Lockfile → package manager mapping
@@ -98,7 +99,7 @@ async function parseManifest(
     case 'maven':
       return placeholderEntries('maven');
     case 'gradle':
-      return placeholderEntries('gradle');
+      return parseGradleManifest(root, manifestPath);
     default:
       return [];
   }

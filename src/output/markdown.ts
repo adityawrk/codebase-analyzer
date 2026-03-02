@@ -10,7 +10,51 @@ import * as path from 'node:path';
 import type {
   ReportData,
   LanguageBreakdown,
+  SizingResult,
 } from '../core/types.js';
+
+// ---------------------------------------------------------------------------
+// Non-code language filter — used to find the real "top language" for classification
+// ---------------------------------------------------------------------------
+
+const NON_CODE_LANGUAGES = new Set([
+  'markdown', 'json', 'yaml', 'toml', 'xml', 'plain text', 'text',
+  'license', 'gitignore', 'svg', 'csv', 'properties file', 'batch',
+  'ini', 'plain',
+]);
+
+/** JS/TS language set for ESLint/Prettier relevance check */
+const JS_TS_LANGUAGES = new Set([
+  'JavaScript', 'TypeScript', 'JSX', 'TSX', 'TypeScript Typings',
+]);
+
+/** Check if the project has a frontend framework in dependencies or tech stack */
+function detectHasFrontendFramework(report: ReportData): boolean {
+  // Check tech stack for framework entries
+  if (report.techStack.meta.status === 'computed') {
+    const frameworkNames = new Set(['react', 'vue', 'svelte', 'angular', 'next.js', 'nuxt', 'remix', 'gatsby', 'solid', 'preact']);
+    for (const entry of report.techStack.stack) {
+      if (frameworkNames.has(entry.name.toLowerCase())) return true;
+    }
+  }
+  // Check dependencies for common frontend packages
+  if (report.dependencies.meta.status === 'computed') {
+    const frontendPkgs = new Set(['react', 'react-dom', 'vue', 'svelte', '@angular/core', 'next', 'nuxt', 'remix', 'gatsby', 'solid-js', 'preact']);
+    for (const dep of report.dependencies.dependencies) {
+      if (frontendPkgs.has(dep.name.toLowerCase())) return true;
+    }
+  }
+  return false;
+}
+
+/** Check if JS/TS is a significant part of the codebase (>= 5% of code lines) */
+function hasJsTsLanguages(sizing: SizingResult): boolean {
+  if (sizing.meta.status !== 'computed') return false;
+  const jsTsLines = sizing.languages
+    .filter((l) => JS_TS_LANGUAGES.has(l.language))
+    .reduce((sum, l) => sum + l.codeLines, 0);
+  return jsTsLines > 0 && (sizing.totalCodeLines === 0 || jsTsLines / sizing.totalCodeLines >= 0.05);
+}
 
 // ---------------------------------------------------------------------------
 // Main entry point
@@ -85,11 +129,9 @@ function formatSummary(report: ReportData): string[] {
 
   lines.push('');
 
-  // Analysis completeness note
-  if (report.meta.analysisCompleteness < 100) {
-    lines.push(`**Analysis Completeness:** ${report.meta.analysisCompleteness}%`);
-    lines.push('');
-  }
+  // Analysis completeness note — always show
+  lines.push(`**Analysis Completeness:** ${report.meta.analysisCompleteness}%`);
+  lines.push('');
 
   return lines;
 }
@@ -107,7 +149,7 @@ function formatLanguages(report: ReportData): string[] {
   const sorted = [...report.sizing.languages].sort((a, b) => b.lines - a.lines);
   for (const lang of sorted) {
     const pctRounded = Math.round(lang.percentOfCode);
-    const label = lang.extension || `(${lang.language})`;
+    const label = lang.extension || lang.language;
     lines.push(
       `| ${label.padEnd(10)} | ${String(lang.files).padStart(5)} | ${String(lang.lines).padStart(7)} | ${(String(pctRounded) + '%').padStart(4)} |`,
     );
@@ -170,8 +212,9 @@ interface CodeTypeBucket {
 /**
  * Classify a single LanguageBreakdown entry into a code-type category.
  * Uses extension first, then falls back to language name.
+ * When a frontend framework is detected, .ts/.js files are classified as Frontend.
  */
-function classifyLanguageEntry(lang: LanguageBreakdown): CodeCategory {
+function classifyLanguageEntry(lang: LanguageBreakdown, hasFrontend: boolean): CodeCategory {
   const ext = lang.extension.toLowerCase();
   const name = lang.language.toLowerCase();
 
@@ -179,6 +222,11 @@ function classifyLanguageEntry(lang: LanguageBreakdown): CodeCategory {
   if (INFRA_EXTENSIONS.has(ext) || INFRA_LANGUAGES.has(name)) return 'Infrastructure';
   if (CONFIG_EXTENSIONS.has(ext) || CONFIG_LANGUAGES.has(name)) return 'Config';
   if (DOC_EXTENSIONS.has(ext) || DOC_LANGUAGES.has(name)) return 'Other';
+
+  // When a frontend framework is detected, classify JS/TS as Frontend
+  if (hasFrontend && (ext === '.ts' || ext === '.js' || ext === '.tsx' || ext === '.jsx')) {
+    return 'Frontend';
+  }
 
   // Everything else is treated as backend/application code
   return 'Backend';
@@ -192,10 +240,13 @@ function determinePrimaryClassification(
   buckets: Map<CodeCategory, CodeTypeBucket>,
   report: ReportData,
 ): string {
-  // Find the top language for labelling
+  // Find the top CODE language for labelling (exclude non-code like Markdown, JSON, etc.)
   let topLanguage = '';
   if (report.sizing.meta.status === 'computed' && report.sizing.languages.length > 0) {
-    const sorted = [...report.sizing.languages].sort((a, b) => b.codeLines - a.codeLines);
+    const codeOnly = report.sizing.languages.filter(
+      (l) => !NON_CODE_LANGUAGES.has(l.language.toLowerCase()),
+    );
+    const sorted = [...codeOnly].sort((a, b) => b.codeLines - a.codeLines);
     if (sorted[0]) topLanguage = sorted[0].language;
   }
 
@@ -231,6 +282,7 @@ function formatCodeTypeBreakdown(report: ReportData): string[] {
   }
 
   // Step 1: Classify each language entry into a category bucket
+  const hasFrontend = detectHasFrontendFramework(report);
   const buckets = new Map<CodeCategory, CodeTypeBucket>();
   const allCategories: CodeCategory[] = ['Frontend', 'Backend', 'Infrastructure', 'Config', 'Test', 'Other'];
   for (const cat of allCategories) {
@@ -238,7 +290,7 @@ function formatCodeTypeBreakdown(report: ReportData): string[] {
   }
 
   for (const lang of report.sizing.languages) {
-    const cat = classifyLanguageEntry(lang);
+    const cat = classifyLanguageEntry(lang, hasFrontend);
     const bucket = buckets.get(cat)!;
     bucket.files += lang.files;
     bucket.lines += lang.lines;
@@ -381,6 +433,14 @@ function formatHealth(report: ReportData): string[] {
 }
 
 function formatComplexity(report: ReportData): string[] {
+  if (report.complexity.meta.status === 'skipped') {
+    return [
+      '## Cyclomatic Complexity',
+      '',
+      `*Skipped: ${report.complexity.meta.reason ?? 'Unknown reason'}*`,
+      '',
+    ];
+  }
   if (report.complexity.meta.status !== 'computed') return [];
 
   const lines: string[] = [];
@@ -563,10 +623,10 @@ function formatSecurity(report: ReportData): string[] {
     } else {
       lines.push(`**${report.security.secretsFound} potential secret(s) detected:**`);
       lines.push('');
-      lines.push('| File | Line | Rule |');
-      lines.push('|------|------|------|');
+      lines.push('| File | Line | Rule | Context |');
+      lines.push('|------|------|------|---------|');
       for (const f of report.security.findings) {
-        lines.push(`| ${f.file} | ${f.line} | ${f.ruleId} |`);
+        lines.push(`| ${f.file} | ${f.line} | ${f.ruleId} | ${f.context ?? 'production'} |`);
       }
     }
     lines.push('');
@@ -734,11 +794,15 @@ function formatConfigTooling(report: ReportData): string[] {
   // TypeScript (if TS is in the stack), linters, Docker, CI.
   const alwaysShow = new Set([
     'Package Manager',
-    'ESLint',
-    'Prettier',
     'Docker',
     '.editorconfig',
   ]);
+
+  // Only show ESLint/Prettier as expected items for JS/TS projects
+  if (hasJsTsLanguages(report.sizing)) {
+    alwaysShow.add('ESLint');
+    alwaysShow.add('Prettier');
+  }
 
   // Show TypeScript row only if TS files exist in the sizing data
   const hasTypeScript = report.sizing.meta.status === 'computed' &&
@@ -861,6 +925,14 @@ function formatDuplication(report: ReportData): string[] {
 }
 
 function formatArchitecture(report: ReportData): string[] {
+  if (report.architecture.meta.status === 'skipped') {
+    return [
+      '## Architecture',
+      '',
+      `*Skipped: ${report.architecture.meta.reason ?? 'Unknown reason'}*`,
+      '',
+    ];
+  }
   if (report.architecture.meta.status !== 'computed') return [];
 
   const lines: string[] = [];

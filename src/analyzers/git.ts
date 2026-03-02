@@ -476,8 +476,11 @@ export async function analyzeGit(
   );
 
   // Bus factor from recent contributors (last 12 months)
+  // Fall back to all-time contributors for dormant repos with no recent activity
   const recentContributors = parseShortlog(recentShortlogResult.stdout);
-  const busFactor = calculateBusFactor(recentContributors);
+  const busFactor = recentContributors.length > 0
+    ? calculateBusFactor(recentContributors)
+    : calculateBusFactor(rawContributors);
 
   // Recent commits
   const recentCommits =

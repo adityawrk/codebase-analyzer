@@ -19,7 +19,7 @@ const program = new Command();
 program
   .name('codebase-analyzer')
   .description('Self-hosted static analysis CLI for codebase reports')
-  .version('0.1.0');
+  .version('1.0.0');
 
 program
   .command('analyze')

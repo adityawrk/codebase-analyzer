@@ -47,6 +47,12 @@ function sortTree(node: FolderNode): void {
   }
 }
 
+/** Maximum depth for tree rendering. Deeper folders are summarized. */
+const MAX_TREE_DEPTH = 4;
+
+/** Maximum total lines in the rendered tree. Exceeding this triggers truncation. */
+const MAX_TREE_LINES = 80;
+
 /**
  * Render a FolderNode tree into a formatted string using standard tree characters.
  *
@@ -58,16 +64,33 @@ function sortTree(node: FolderNode): void {
  * │   └── utils/ (3 files)
  * └── docs/ (8 files)
  * ```
+ *
+ * Tree is capped at MAX_TREE_DEPTH levels and MAX_TREE_LINES total lines.
  */
 function renderTree(root: FolderNode): string {
   const lines: string[] = [];
   lines.push(`${root.name}/`);
-  renderChildren(root.children, '', lines);
+  const truncated = { value: false };
+  renderChildren(root.children, '', lines, 1, truncated);
+  if (truncated.value) {
+    lines.push('... (truncated)');
+  }
   return lines.join('\n');
 }
 
-function renderChildren(children: FolderNode[], prefix: string, lines: string[]): void {
+function renderChildren(
+  children: FolderNode[],
+  prefix: string,
+  lines: string[],
+  depth: number,
+  truncated: { value: boolean },
+): void {
   for (let i = 0; i < children.length; i++) {
+    if (lines.length >= MAX_TREE_LINES) {
+      truncated.value = true;
+      return;
+    }
+
     const child = children[i]!;
     const isLast = i === children.length - 1;
     const connector = isLast ? '└── ' : '├── ';
@@ -75,10 +98,28 @@ function renderChildren(children: FolderNode[], prefix: string, lines: string[])
     lines.push(`${prefix}${connector}${child.name}/ ${fileCountLabel}`);
 
     if (child.children.length > 0) {
-      const childPrefix = prefix + (isLast ? '    ' : '│   ');
-      renderChildren(child.children, childPrefix, lines);
+      if (depth >= MAX_TREE_DEPTH) {
+        // Summarize deeper levels instead of recursing
+        const subfolderCount = countSubfolders(child);
+        if (subfolderCount > 0) {
+          const summaryPrefix = prefix + (isLast ? '    ' : '│   ');
+          lines.push(`${summaryPrefix}└── ... (${subfolderCount} more subfolder${subfolderCount === 1 ? '' : 's'})`);
+        }
+      } else {
+        const childPrefix = prefix + (isLast ? '    ' : '│   ');
+        renderChildren(child.children, childPrefix, lines, depth + 1, truncated);
+      }
     }
   }
+}
+
+/** Count total subfolders recursively. */
+function countSubfolders(node: FolderNode): number {
+  let count = node.children.length;
+  for (const child of node.children) {
+    count += countSubfolders(child);
+  }
+  return count;
 }
 
 /**

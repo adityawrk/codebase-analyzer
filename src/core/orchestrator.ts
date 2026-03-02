@@ -38,7 +38,7 @@ import type {
   TestAnalysis,
 } from './types.js';
 
-const VERSION = '0.1.0';
+const VERSION = '1.0.0';
 
 function errorMeta(err: unknown, durationMs: number): AnalyzerMeta {
   return {

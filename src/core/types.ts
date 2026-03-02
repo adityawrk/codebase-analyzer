@@ -292,6 +292,7 @@ export interface SecurityFinding {
   line: number;
   ruleId: string;
   description: string;
+  context?: 'production' | 'test' | 'docs';
 }
 
 export interface SecurityResult {

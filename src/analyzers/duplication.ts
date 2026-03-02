@@ -161,13 +161,23 @@ function parseJscpdReport(
     const firstFilePath = makeRelative(dup.firstFile.name, repoRoot);
     const secondFilePath = makeRelative(dup.secondFile.name, repoRoot);
 
+    // Extract line numbers, preferring startLoc/endLoc (actual lines) over start/end (token positions)
+    let firstStart = dup.firstFile.startLoc?.line ?? dup.firstFile.start;
+    let firstEnd = dup.firstFile.endLoc?.line ?? dup.firstFile.end;
+    let secondStart = dup.secondFile.startLoc?.line ?? dup.secondFile.start;
+    let secondEnd = dup.secondFile.endLoc?.line ?? dup.secondFile.end;
+
+    // Normalize reversed ranges (jscpd sometimes reports start > end)
+    if (firstStart > firstEnd) [firstStart, firstEnd] = [firstEnd, firstStart];
+    if (secondStart > secondEnd) [secondStart, secondEnd] = [secondEnd, secondStart];
+
     clones.push({
       firstFile: firstFilePath,
-      firstStartLine: dup.firstFile.start,
-      firstEndLine: dup.firstFile.end,
+      firstStartLine: firstStart,
+      firstEndLine: firstEnd,
       secondFile: secondFilePath,
-      secondStartLine: dup.secondFile.start,
-      secondEndLine: dup.secondFile.end,
+      secondStartLine: secondStart,
+      secondEndLine: secondEnd,
       lines,
       tokens,
     });

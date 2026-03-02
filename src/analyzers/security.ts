@@ -34,6 +34,20 @@ interface GitleaksFinding {
 // ---------------------------------------------------------------------------
 
 /**
+ * Classify a file path into a context category based on directory patterns.
+ */
+function classifyFindingContext(filePath: string): 'production' | 'test' | 'docs' {
+  const lower = filePath.toLowerCase();
+  if (/(?:^|\/)(?:tests?|__tests__|spec|__mocks__)\//i.test(lower) || /\.(?:test|spec)\./i.test(lower)) {
+    return 'test';
+  }
+  if (/(?:^|\/)(?:docs?|examples?|tutorials?|samples?)\//i.test(lower)) {
+    return 'docs';
+  }
+  return 'production';
+}
+
+/**
  * Parse gitleaks JSON output into SecurityFinding[], stripping all secret values.
  * Returns an empty array if parsing fails.
  */
@@ -65,6 +79,7 @@ function parseGitleaksOutput(stdout: string, repoRoot: string): SecurityFinding[
       line: entry.StartLine,
       ruleId: entry.RuleID,
       description: entry.Description,
+      context: classifyFindingContext(relFile),
     };
   });
 }
