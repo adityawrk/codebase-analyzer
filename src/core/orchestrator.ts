@@ -6,18 +6,29 @@
 
 import * as path from 'node:path';
 import { buildRepositoryIndex } from './repo-index.js';
-import { analyzeSizing, analyzeTests } from '../analyzers/sizing.js';
+import { analyzeSizing } from '../analyzers/sizing.js';
+import { analyzeTests } from '../analyzers/testing.js';
 import { analyzeStructure } from '../analyzers/structure.js';
 import { analyzeRepoHealth } from '../analyzers/repo-health.js';
 import { analyzeComplexity } from '../analyzers/complexity.js';
+import { analyzeGit } from '../analyzers/git.js';
+import { analyzeDependencies } from '../analyzers/dependencies.js';
+import { analyzeSecurity } from '../analyzers/security.js';
+import { analyzeTechStack } from '../analyzers/tech-stack.js';
+import { analyzeEnvVars } from '../analyzers/env-vars.js';
 import type {
   AnalysisConfig,
   AnalyzerMeta,
   ComplexityResult,
+  DependencyResult,
+  EnvVarsResult,
+  GitAnalysisResult,
   RepoHealthResult,
   ReportData,
+  SecurityResult,
   SizingResult,
   StructureResult,
+  TechStackResult,
   TestAnalysis,
 } from './types.js';
 
@@ -72,6 +83,7 @@ function emptyComplexity(): ComplexityResult {
 
 function emptyTestAnalysis(): TestAnalysis {
   return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
     testFiles: 0,
     testLines: 0,
     codeLines: 0,
@@ -79,6 +91,57 @@ function emptyTestAnalysis(): TestAnalysis {
     testFrameworks: [],
     coverageConfigFound: false,
     testFileList: [],
+  };
+}
+
+function emptyGit(): GitAnalysisResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    totalCommits: 0,
+    contributors: 0,
+    firstCommitDate: null,
+    lastCommitDate: null,
+    activeDays: 0,
+    topContributors: [],
+    conventionalCommitPercent: 0,
+    busFactor: 0,
+    commitFrequency: { commitsPerWeek: 0, commitsPerMonth: 0 },
+  };
+}
+
+function emptyDependencies(): DependencyResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    totalDependencies: 0,
+    directDependencies: 0,
+    devDependencies: 0,
+    ecosystems: [],
+    packageManager: null,
+    dependencies: [],
+  };
+}
+
+function emptySecurity(): SecurityResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    secretsFound: 0,
+    findings: [],
+  };
+}
+
+function emptyTechStack(): TechStackResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    stack: [],
+  };
+}
+
+function emptyEnvVars(): EnvVarsResult {
+  return {
+    meta: { status: 'error', reason: 'Analyzer failed', durationMs: 0 },
+    totalVars: 0,
+    variables: [],
+    byPrefix: {},
   };
 }
 
@@ -112,13 +175,16 @@ export async function analyzeRepository(
   // Phase 1: Build the index (single-pass)
   const index = await buildRepositoryIndex(absoluteRoot, config);
 
-  // Phase 2: Run analyzers (sequential for now, parallel later as optimization)
+  // Phase 2: Run analyzers
+  // Sizing must run first (testing depends on it)
   const sizing = await runWithTiming('sizing', () => analyzeSizing(index), emptySizing);
   const testAnalysis = await runWithTiming(
     'testAnalysis',
-    () => Promise.resolve(analyzeTests(index, sizing)),
+    () => analyzeTests(index, sizing),
     emptyTestAnalysis,
   );
+
+  // These analyzers are independent — run them all
   const structure = await runWithTiming('structure', () => analyzeStructure(index), emptyStructure);
   const repoHealth = await runWithTiming(
     'repoHealth',
@@ -130,11 +196,35 @@ export async function analyzeRepository(
     () => analyzeComplexity(index),
     emptyComplexity,
   );
+  const git = await runWithTiming('git', () => analyzeGit(index), emptyGit);
+  const dependencies = await runWithTiming(
+    'dependencies',
+    () => analyzeDependencies(index),
+    emptyDependencies,
+  );
+  const security = await runWithTiming(
+    'security',
+    () => analyzeSecurity(index),
+    emptySecurity,
+  );
+  const techStack = await runWithTiming(
+    'techStack',
+    () => analyzeTechStack(index),
+    emptyTechStack,
+  );
+  const envVars = await runWithTiming(
+    'envVars',
+    () => analyzeEnvVars(index),
+    emptyEnvVars,
+  );
 
   // Calculate analysis completeness
-  const analyzers = [sizing, structure, repoHealth, complexity];
-  const computed = analyzers.filter((a) => a.meta.status === 'computed').length;
-  const completeness = Math.round((computed / analyzers.length) * 100);
+  const allAnalyzers = [
+    sizing, structure, repoHealth, complexity, testAnalysis,
+    git, dependencies, security, techStack, envVars,
+  ];
+  const computed = allAnalyzers.filter((a) => a.meta.status === 'computed').length;
+  const completeness = Math.round((computed / allAnalyzers.length) * 100);
 
   const overallDurationMs = Math.round(performance.now() - overallStart);
 
@@ -150,5 +240,10 @@ export async function analyzeRepository(
     repoHealth,
     complexity,
     testAnalysis,
+    git,
+    dependencies,
+    security,
+    techStack,
+    envVars,
   };
 }

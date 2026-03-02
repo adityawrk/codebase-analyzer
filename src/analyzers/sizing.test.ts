@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { analyzeSizing, analyzeTests } from './sizing.js';
+import { analyzeSizing } from './sizing.js';
 import { buildRepositoryIndex } from '../core/repo-index.js';
 import type { AnalysisConfig } from '../core/types.js';
 
@@ -125,68 +125,3 @@ describe('analyzeSizing', () => {
   });
 });
 
-describe('analyzeTests', () => {
-  it('produces a valid TestAnalysis structure', async () => {
-    const index = await buildTestIndex();
-    const sizing = await analyzeSizing(index);
-    const testResult = analyzeTests(index, sizing);
-
-    expect(typeof testResult.testFiles).toBe('number');
-    expect(typeof testResult.testLines).toBe('number');
-    expect(typeof testResult.codeLines).toBe('number');
-    expect(typeof testResult.testCodeRatio).toBe('number');
-    expect(Array.isArray(testResult.testFrameworks)).toBe(true);
-    expect(typeof testResult.coverageConfigFound).toBe('boolean');
-    expect(Array.isArray(testResult.testFileList)).toBe(true);
-  });
-
-  it('detects test files from the current project', async () => {
-    const index = await buildTestIndex();
-    const sizing = await analyzeSizing(index);
-    const testResult = analyzeTests(index, sizing);
-
-    // This project has .test.ts files
-    expect(testResult.testFiles).toBeGreaterThan(0);
-  });
-
-  it('detects vitest as a test framework in this project', async () => {
-    const index = await buildTestIndex();
-    const sizing = await analyzeSizing(index);
-    const testResult = analyzeTests(index, sizing);
-
-    expect(testResult.testFrameworks).toContain('vitest');
-  });
-
-  it('testFileList is sorted by lines descending', async () => {
-    const index = await buildTestIndex();
-    const sizing = await analyzeSizing(index);
-    const testResult = analyzeTests(index, sizing);
-
-    for (let i = 1; i < testResult.testFileList.length; i++) {
-      expect(testResult.testFileList[i]!.lines).toBeLessThanOrEqual(
-        testResult.testFileList[i - 1]!.lines,
-      );
-    }
-  });
-
-  it('testCodeRatio is non-negative', async () => {
-    const index = await buildTestIndex();
-    const sizing = await analyzeSizing(index);
-    const testResult = analyzeTests(index, sizing);
-
-    expect(testResult.testCodeRatio).toBeGreaterThanOrEqual(0);
-  });
-
-  it('testFileList entries have path and lines', async () => {
-    const index = await buildTestIndex();
-    const sizing = await analyzeSizing(index);
-    const testResult = analyzeTests(index, sizing);
-
-    for (const entry of testResult.testFileList) {
-      expect(typeof entry.path).toBe('string');
-      expect(entry.path.length).toBeGreaterThan(0);
-      expect(typeof entry.lines).toBe('number');
-      expect(entry.lines).toBeGreaterThan(0);
-    }
-  });
-});

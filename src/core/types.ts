@@ -209,9 +209,10 @@ export interface ComplexityResult {
   hotspots: FunctionComplexity[];
 }
 
-// -- Test Analysis (embedded in sizing for now) --
+// -- Test Analysis --
 
 export interface TestAnalysis {
+  meta: AnalyzerMeta;
   testFiles: number;
   testLines: number;
   codeLines: number;
@@ -219,6 +220,93 @@ export interface TestAnalysis {
   testFrameworks: string[];
   coverageConfigFound: boolean;
   testFileList: Array<{ path: string; lines: number }>;
+}
+
+// -- Git Analysis --
+
+export interface ContributorInfo {
+  name: string;
+  email: string;
+  commits: number;
+}
+
+export interface GitAnalysisResult {
+  meta: AnalyzerMeta;
+  totalCommits: number;
+  contributors: number;
+  firstCommitDate: string | null;
+  lastCommitDate: string | null;
+  activeDays: number;
+  topContributors: ContributorInfo[];
+  conventionalCommitPercent: number;
+  busFactor: number;
+  commitFrequency: {
+    commitsPerWeek: number;
+    commitsPerMonth: number;
+  };
+}
+
+// -- Dependencies --
+
+export interface DependencyEntry {
+  name: string;
+  version: string;
+  type: 'direct' | 'dev' | 'peer' | 'optional';
+  ecosystem: string;
+}
+
+export interface DependencyResult {
+  meta: AnalyzerMeta;
+  totalDependencies: number;
+  directDependencies: number;
+  devDependencies: number;
+  ecosystems: string[];
+  packageManager: string | null;
+  dependencies: DependencyEntry[];
+}
+
+// -- Security --
+
+export interface SecurityFinding {
+  file: string;
+  line: number;
+  ruleId: string;
+  description: string;
+}
+
+export interface SecurityResult {
+  meta: AnalyzerMeta;
+  secretsFound: number;
+  findings: SecurityFinding[];
+}
+
+// -- Tech Stack --
+
+export interface TechStackEntry {
+  name: string;
+  category: 'framework' | 'build-tool' | 'linter' | 'formatter' | 'test-runner' | 'deployment' | 'database' | 'service' | 'language-tool' | 'other';
+  source: string;
+}
+
+export interface TechStackResult {
+  meta: AnalyzerMeta;
+  stack: TechStackEntry[];
+}
+
+// -- Environment Variables --
+
+export interface EnvVarEntry {
+  name: string;
+  file: string;
+  line: number;
+  prefix: string;
+}
+
+export interface EnvVarsResult {
+  meta: AnalyzerMeta;
+  totalVars: number;
+  variables: EnvVarEntry[];
+  byPrefix: Record<string, number>;
 }
 
 // --- Report ---
@@ -237,4 +325,9 @@ export interface ReportData {
   repoHealth: RepoHealthResult;
   complexity: ComplexityResult;
   testAnalysis: TestAnalysis;
+  git: GitAnalysisResult;
+  dependencies: DependencyResult;
+  security: SecurityResult;
+  techStack: TechStackResult;
+  envVars: EnvVarsResult;
 }

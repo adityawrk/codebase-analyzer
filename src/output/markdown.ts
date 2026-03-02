@@ -4,7 +4,17 @@
  */
 
 import * as path from 'node:path';
-import type { ReportData, LanguageBreakdown, HealthCheck, FunctionComplexity } from '../core/types.js';
+import type {
+  ReportData,
+  LanguageBreakdown,
+  HealthCheck,
+  FunctionComplexity,
+  ContributorInfo,
+  DependencyEntry,
+  SecurityFinding,
+  TechStackEntry,
+  EnvVarEntry,
+} from '../core/types.js';
 
 export function formatMarkdown(report: ReportData): string {
   const lines: string[] = [];
@@ -137,6 +147,143 @@ export function formatMarkdown(report: ReportData): string {
     const sorted = [...report.sizing.godFiles].sort((a, b) => b.lines - a.lines);
     for (const f of sorted) {
       lines.push(`| ${f.path} | ${f.lines} | ${f.language} |`);
+    }
+    lines.push('');
+  }
+
+  // Git Analysis
+  if (report.git.meta.status === 'computed') {
+    lines.push('## Git Analysis');
+    lines.push('');
+    lines.push('| Metric | Value |');
+    lines.push('|--------|-------|');
+    lines.push(`| Total Commits | ${report.git.totalCommits} |`);
+    lines.push(`| Contributors | ${report.git.contributors} |`);
+    lines.push(`| Active Days | ${report.git.activeDays} |`);
+    lines.push(`| Bus Factor | ${report.git.busFactor} |`);
+    lines.push(`| Conventional Commits | ${report.git.conventionalCommitPercent}% |`);
+    if (report.git.firstCommitDate) {
+      lines.push(`| First Commit | ${formatDate(report.git.firstCommitDate)} |`);
+    }
+    if (report.git.lastCommitDate) {
+      lines.push(`| Last Commit | ${formatDate(report.git.lastCommitDate)} |`);
+    }
+    lines.push(`| Commits/Week | ${report.git.commitFrequency.commitsPerWeek.toFixed(1)} |`);
+    lines.push(`| Commits/Month | ${report.git.commitFrequency.commitsPerMonth.toFixed(1)} |`);
+    lines.push('');
+
+    if (report.git.topContributors.length > 0) {
+      lines.push('### Top Contributors');
+      lines.push('');
+      lines.push('| Name | Email | Commits |');
+      lines.push('|------|-------|---------|');
+      for (const c of report.git.topContributors) {
+        lines.push(`| ${c.name} | ${c.email} | ${c.commits} |`);
+      }
+      lines.push('');
+    }
+  }
+
+  // Dependencies
+  if (report.dependencies.meta.status === 'computed') {
+    lines.push('## Dependencies');
+    lines.push('');
+    lines.push('| Metric | Value |');
+    lines.push('|--------|-------|');
+    lines.push(`| Total Dependencies | ${report.dependencies.totalDependencies} |`);
+    lines.push(`| Direct Dependencies | ${report.dependencies.directDependencies} |`);
+    lines.push(`| Dev Dependencies | ${report.dependencies.devDependencies} |`);
+    if (report.dependencies.packageManager) {
+      lines.push(`| Package Manager | ${report.dependencies.packageManager} |`);
+    }
+    lines.push(`| Ecosystems | ${report.dependencies.ecosystems.join(', ') || 'None detected'} |`);
+    lines.push('');
+
+    if (report.dependencies.dependencies.length > 0) {
+      lines.push('### Dependency List');
+      lines.push('');
+      lines.push('| Name | Version | Type | Ecosystem |');
+      lines.push('|------|---------|------|-----------|');
+      const deps = report.dependencies.dependencies.slice(0, 50);
+      for (const d of deps) {
+        lines.push(`| ${d.name} | ${d.version} | ${d.type} | ${d.ecosystem} |`);
+      }
+      if (report.dependencies.dependencies.length > 50) {
+        lines.push('');
+        lines.push(`*... and ${report.dependencies.dependencies.length - 50} more dependencies*`);
+      }
+      lines.push('');
+    }
+  }
+
+  // Security
+  if (report.security.meta.status === 'computed') {
+    lines.push('## Security');
+    lines.push('');
+    if (report.security.secretsFound === 0) {
+      lines.push('No secrets or credentials detected.');
+    } else {
+      lines.push(`**${report.security.secretsFound} potential secret(s) detected:**`);
+      lines.push('');
+      lines.push('| File | Line | Rule |');
+      lines.push('|------|------|------|');
+      for (const f of report.security.findings) {
+        lines.push(`| ${f.file} | ${f.line} | ${f.ruleId} |`);
+      }
+    }
+    lines.push('');
+  } else if (report.security.meta.status === 'skipped') {
+    lines.push('## Security');
+    lines.push('');
+    lines.push(`*Skipped: ${report.security.meta.reason ?? 'Unknown reason'}*`);
+    lines.push('');
+  }
+
+  // Tech Stack
+  if (report.techStack.meta.status === 'computed' && report.techStack.stack.length > 0) {
+    lines.push('## Tech Stack');
+    lines.push('');
+    lines.push('| Tool | Category | Source |');
+    lines.push('|------|----------|--------|');
+    const sortedStack = [...report.techStack.stack].sort((a, b) => a.category.localeCompare(b.category));
+    for (const entry of sortedStack) {
+      lines.push(`| ${entry.name} | ${entry.category} | ${entry.source} |`);
+    }
+    lines.push('');
+  }
+
+  // Environment Variables
+  if (report.envVars.meta.status === 'computed' && report.envVars.totalVars > 0) {
+    lines.push('## Environment Variables');
+    lines.push('');
+    lines.push(`**${report.envVars.totalVars} environment variable(s) detected**`);
+    lines.push('');
+
+    // Show by prefix
+    const prefixes = Object.entries(report.envVars.byPrefix).sort((a, b) => b[1] - a[1]);
+    if (prefixes.length > 0) {
+      lines.push('### By Prefix');
+      lines.push('');
+      lines.push('| Prefix | Count |');
+      lines.push('|--------|-------|');
+      for (const [prefix, count] of prefixes) {
+        lines.push(`| ${prefix} | ${count} |`);
+      }
+      lines.push('');
+    }
+
+    // Show variable list (capped at 30)
+    const vars = report.envVars.variables.slice(0, 30);
+    lines.push('### Variables');
+    lines.push('');
+    lines.push('| Name | File | Line |');
+    lines.push('|------|------|------|');
+    for (const v of vars) {
+      lines.push(`| ${v.name} | ${v.file} | ${v.line} |`);
+    }
+    if (report.envVars.variables.length > 30) {
+      lines.push('');
+      lines.push(`*... and ${report.envVars.variables.length - 30} more variables*`);
     }
     lines.push('');
   }
