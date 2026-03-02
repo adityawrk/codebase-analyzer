@@ -27,6 +27,7 @@ program
   .argument('<path>', 'Path to the repository to analyze')
   .option('-f, --format <format>', 'Output format: markdown or json', 'markdown')
   .option('-o, --output <file>', 'Write report to file instead of stdout')
+  .option('--rubric <path>', 'Path to custom rubric YAML (default: built-in rubric.yaml)')
   .option('--offline', 'Skip external tool calls', false)
   .option('--timeout <ms>', 'Per-tool timeout in milliseconds', '60000')
   .option('--include <patterns...>', 'Include glob patterns')
@@ -54,23 +55,36 @@ program
       process.exit(1);
     }
 
+    const timeout = parseInt(options.timeout as string, 10);
+    if (Number.isNaN(timeout) || timeout <= 0) {
+      console.error('Error: --timeout must be a positive integer (milliseconds)');
+      process.exit(1);
+    }
+
+    const maxFileSize = parseInt(options.maxFileSize as string, 10);
+    if (Number.isNaN(maxFileSize) || maxFileSize <= 0) {
+      console.error('Error: --max-file-size must be a positive integer (bytes)');
+      process.exit(1);
+    }
+
     const config: AnalysisConfig = {
       ...DEFAULT_CONFIG,
       root: absolutePath,
       format: format as 'markdown' | 'json',
       outputPath: (options.output as string) ?? null,
       offline: options.offline as boolean,
-      timeout: parseInt(options.timeout as string, 10),
+      timeout,
       include: (options.include as string[]) ?? [],
       exclude: (options.exclude as string[]) ?? [],
       followSymlinks: options.followSymlinks as boolean,
-      maxFileSize: parseInt(options.maxFileSize as string, 10),
+      maxFileSize,
     };
 
+    const rubricPath = options.rubric as string | undefined;
     const startTime = performance.now();
 
     try {
-      const report = await analyzeRepository(absolutePath, config);
+      const report = await analyzeRepository(absolutePath, config, rubricPath);
       const output = format === 'json' ? formatJson(report) : formatMarkdown(report);
 
       if (config.outputPath) {

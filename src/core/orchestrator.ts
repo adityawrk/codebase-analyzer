@@ -195,6 +195,7 @@ async function runWithTiming<T>(
 export async function analyzeRepository(
   root: string,
   config: AnalysisConfig,
+  rubricPath?: string,
 ): Promise<ReportData> {
   const absoluteRoot = path.resolve(root);
   const overallStart = performance.now();
@@ -267,7 +268,7 @@ export async function analyzeRepository(
   };
 
   // Phase 3: Compute scoring (skip if rubric failed to load)
-  const rubric = loadRubric();
+  const rubric = loadRubric(rubricPath);
   const hasRubric = Object.keys(rubric.categories).length > 0;
   if (hasRubric) {
     const scoring = computeScoring(report, rubric);
