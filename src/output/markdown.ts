@@ -14,6 +14,9 @@ import type {
   SecurityFinding,
   TechStackEntry,
   EnvVarEntry,
+  ClonePair,
+  CircularDependency,
+  ModuleCohesion,
 } from '../core/types.js';
 
 export function formatMarkdown(report: ReportData): string {
@@ -286,6 +289,68 @@ export function formatMarkdown(report: ReportData): string {
       lines.push(`*... and ${report.envVars.variables.length - 30} more variables*`);
     }
     lines.push('');
+  }
+
+  // Duplication
+  if (report.duplication.meta.status === 'computed') {
+    lines.push('## Code Duplication');
+    lines.push('');
+    lines.push('| Metric | Value |');
+    lines.push('|--------|-------|');
+    lines.push(`| Duplicate Lines | ${report.duplication.duplicateLines} |`);
+    lines.push(`| Duplication % | ${report.duplication.duplicatePercentage.toFixed(1)}% |`);
+    lines.push(`| Clone Pairs | ${report.duplication.totalClones} |`);
+    lines.push('');
+
+    if (report.duplication.clones.length > 0) {
+      lines.push('### Largest Clones');
+      lines.push('');
+      lines.push('| First File | Lines | Second File | Lines |');
+      lines.push('|------------|-------|-------------|-------|');
+      const topClones = report.duplication.clones.slice(0, 10);
+      for (const c of topClones) {
+        lines.push(`| ${c.firstFile}:${c.firstStartLine}-${c.firstEndLine} | ${c.lines} | ${c.secondFile}:${c.secondStartLine}-${c.secondEndLine} | ${c.lines} |`);
+      }
+      lines.push('');
+    }
+  } else if (report.duplication.meta.status === 'skipped') {
+    lines.push('## Code Duplication');
+    lines.push('');
+    lines.push(`*Skipped: ${report.duplication.meta.reason ?? 'Unknown reason'}*`);
+    lines.push('');
+  }
+
+  // Architecture
+  if (report.architecture.meta.status === 'computed') {
+    lines.push('## Architecture');
+    lines.push('');
+    lines.push('| Metric | Value |');
+    lines.push('|--------|-------|');
+    lines.push(`| Total Imports | ${report.architecture.totalImports} |`);
+    lines.push(`| Unique Modules | ${report.architecture.uniqueModules} |`);
+    lines.push(`| Circular Dependencies | ${report.architecture.circularDependencies.length} |`);
+    lines.push('');
+
+    if (report.architecture.circularDependencies.length > 0) {
+      lines.push('### Circular Dependencies');
+      lines.push('');
+      for (const cd of report.architecture.circularDependencies) {
+        lines.push(`- ${cd.cycle.join(' → ')} → ${cd.cycle[0]}`);
+      }
+      lines.push('');
+    }
+
+    if (report.architecture.moduleCohesion.length > 0) {
+      lines.push('### Module Cohesion');
+      lines.push('');
+      lines.push('| Module | Intra-module | Total | Cohesion Ratio |');
+      lines.push('|--------|-------------|-------|----------------|');
+      const sorted = [...report.architecture.moduleCohesion].sort((a, b) => b.cohesionRatio - a.cohesionRatio);
+      for (const m of sorted) {
+        lines.push(`| ${m.module} | ${m.intraImports} | ${m.totalImports} | ${m.cohesionRatio.toFixed(2)} |`);
+      }
+      lines.push('');
+    }
   }
 
   // Footer

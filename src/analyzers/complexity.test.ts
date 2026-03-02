@@ -309,3 +309,286 @@ function second() {}
     expect(second!.line).toBe(3);
   });
 });
+
+// ── Python complexity ──────────────────────────────────────────────
+
+/**
+ * Helper: parse a Python source string and return the computed
+ * complexity for the first (or only) function found.
+ */
+async function getFirstPythonFunctionComplexity(source: string): Promise<number> {
+  const result = await computeFileComplexity(source, 'python', 'test.py');
+  expect(result.functions.length).toBeGreaterThanOrEqual(1);
+  return result.functions[0]!.complexity;
+}
+
+describe('Python complexity', () => {
+  it('scores 1 for a simple Python function with no branches', async () => {
+    const source = `
+def hello():
+    return 1
+`;
+    // base = 1, no decision points
+    // Expected: 1
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(1);
+  });
+
+  it('scores correct complexity for if/elif/else (else=0, each if/elif=+1)', async () => {
+    const source = `
+def classify(x):
+    if x > 100:
+        return "huge"
+    elif x > 50:
+        return "big"
+    elif x > 10:
+        return "medium"
+    else:
+        return "small"
+`;
+    // base      = 1
+    // if        = 1
+    // elif #1   = 1 (each elif is a separate if_statement in the AST)
+    // elif #2   = 1
+    // else      = 0
+    // Total     = 4
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(4);
+  });
+
+  it('scores +1 for for loop and +1 for list comprehension', async () => {
+    const source = `
+def process(items):
+    result = []
+    for item in items:
+        result.append(item)
+    squares = [x * x for x in items]
+    return result + squares
+`;
+    // base              = 1
+    // for               = 1
+    // list_comprehension = 1
+    // Total             = 3
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(3);
+  });
+
+  it('scores +1 for except clause in try/except', async () => {
+    const source = `
+def safe_divide(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return None
+`;
+    // base    = 1
+    // except  = 1
+    // Total   = 2
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(2);
+  });
+
+  it('scores +1 each for and/or operators', async () => {
+    const source = `
+def check(a, b, c):
+    return a and b or c
+`;
+    // base = 1
+    // and  = 1
+    // or   = 1
+    // Total = 3
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(3);
+  });
+
+  it('scores +1 for Python ternary (conditional_expression)', async () => {
+    const source = `
+def abs_val(x):
+    return x if x >= 0 else -x
+`;
+    // base                  = 1
+    // conditional_expression = 1
+    // Total                 = 2
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(2);
+  });
+
+  it('extracts function name from function_definition', async () => {
+    const source = `
+def my_function():
+    pass
+`;
+    const result = await computeFileComplexity(source, 'python', 'test.py');
+    expect(result.functions.length).toBe(1);
+    expect(result.functions[0]!.name).toBe('my_function');
+  });
+
+  it('uses <lambda> for lambda expressions', async () => {
+    const source = `
+double = lambda x: x * 2
+`;
+    const result = await computeFileComplexity(source, 'python', 'test.py');
+    expect(result.functions.length).toBe(1);
+    expect(result.functions[0]!.name).toBe('<lambda>');
+  });
+
+  it('counts set/dict comprehensions and generator expressions', async () => {
+    const source = `
+def comprehensions(items):
+    s = {x for x in items}
+    d = {x: x for x in items}
+    g = sum(x for x in items)
+    return s, d, g
+`;
+    // base                      = 1
+    // set_comprehension          = 1
+    // dictionary_comprehension   = 1
+    // generator_expression       = 1
+    // Total                     = 4
+    const c = await getFirstPythonFunctionComplexity(source);
+    expect(c).toBe(4);
+  });
+});
+
+// ── Go complexity ────────────────────────────────────────────────────
+
+/**
+ * Helper: parse a Go source string and return the computed
+ * complexity for the first (or only) function found.
+ */
+async function getFirstGoFunctionComplexity(source: string): Promise<number> {
+  const result = await computeFileComplexity(source, 'go', 'test.go');
+  expect(result.functions.length).toBeGreaterThanOrEqual(1);
+  return result.functions[0]!.complexity;
+}
+
+describe('Go complexity', () => {
+  it('scores 1 for a simple Go function with no branches', async () => {
+    const source = `
+package main
+
+func hello() int {
+    return 1
+}
+`;
+    // base = 1, no decision points
+    // Expected: 1
+    const c = await getFirstGoFunctionComplexity(source);
+    expect(c).toBe(1);
+  });
+
+  it('scores 2 for a Go function with if/else (else=0)', async () => {
+    const source = `
+package main
+
+func check(x int) string {
+    if x > 0 {
+        return "positive"
+    } else {
+        return "non-positive"
+    }
+}
+`;
+    // base = 1
+    // if   = 1
+    // else = 0
+    // Total = 2
+    const c = await getFirstGoFunctionComplexity(source);
+    expect(c).toBe(2);
+  });
+
+  it('scores +1 for a for loop', async () => {
+    const source = `
+package main
+
+func sum(nums []int) int {
+    total := 0
+    for _, n := range nums {
+        total += n
+    }
+    return total
+}
+`;
+    // base = 1
+    // for  = 1
+    // Total = 2
+    const c = await getFirstGoFunctionComplexity(source);
+    expect(c).toBe(2);
+  });
+
+  it('scores +1 per case in switch (default does not count)', async () => {
+    const source = `
+package main
+
+func grade(score int) string {
+    switch {
+    case score >= 90:
+        return "A"
+    case score >= 80:
+        return "B"
+    case score >= 70:
+        return "C"
+    default:
+        return "F"
+    }
+}
+`;
+    // base    = 1
+    // case    = 1 (score >= 90)
+    // case    = 1 (score >= 80)
+    // case    = 1 (score >= 70)
+    // default = 0
+    // Total   = 4
+    const c = await getFirstGoFunctionComplexity(source);
+    expect(c).toBe(4);
+  });
+
+  it('scores +1 each for && and || operators', async () => {
+    const source = `
+package main
+
+func validate(a bool, b bool, c bool) bool {
+    return a && b || c
+}
+`;
+    // base = 1
+    // &&   = 1
+    // ||   = 1
+    // Total = 3
+    const c = await getFirstGoFunctionComplexity(source);
+    expect(c).toBe(3);
+  });
+
+  it('extracts name from method_declaration', async () => {
+    const source = `
+package main
+
+type MyStruct struct{}
+
+func (s MyStruct) MyMethod() int {
+    return 1
+}
+`;
+    const result = await computeFileComplexity(source, 'go', 'test.go');
+    expect(result.functions.length).toBe(1);
+    expect(result.functions[0]!.name).toBe('MyMethod');
+  });
+
+  it('extracts name from func literal assigned with :=', async () => {
+    const source = `
+package main
+
+func main() {
+    add := func(a, b int) int {
+        return a + b
+    }
+    _ = add
+}
+`;
+    const result = await computeFileComplexity(source, 'go', 'test.go');
+    // main + func literal
+    const fnLiteral = result.functions.find((f) => f.name === 'add');
+    expect(fnLiteral).toBeDefined();
+    expect(fnLiteral!.complexity).toBe(1);
+  });
+});

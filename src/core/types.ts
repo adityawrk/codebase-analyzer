@@ -309,6 +309,54 @@ export interface EnvVarsResult {
   byPrefix: Record<string, number>;
 }
 
+// -- Duplication --
+
+export interface ClonePair {
+  firstFile: string;
+  firstStartLine: number;
+  firstEndLine: number;
+  secondFile: string;
+  secondStartLine: number;
+  secondEndLine: number;
+  lines: number;
+  tokens: number;
+}
+
+export interface DuplicationResult {
+  meta: AnalyzerMeta;
+  duplicateLines: number;
+  duplicatePercentage: number;
+  totalClones: number;
+  clones: ClonePair[];
+}
+
+// -- Architecture --
+
+export interface ImportEdge {
+  from: string;
+  to: string;
+}
+
+export interface CircularDependency {
+  cycle: string[];
+}
+
+export interface ModuleCohesion {
+  module: string;
+  intraImports: number;
+  totalImports: number;
+  cohesionRatio: number;
+}
+
+export interface ArchitectureResult {
+  meta: AnalyzerMeta;
+  totalImports: number;
+  uniqueModules: number;
+  importGraph: ImportEdge[];
+  circularDependencies: CircularDependency[];
+  moduleCohesion: ModuleCohesion[];
+}
+
 // --- Report ---
 
 export interface ReportMeta {
@@ -330,4 +378,6 @@ export interface ReportData {
   security: SecurityResult;
   techStack: TechStackResult;
   envVars: EnvVarsResult;
+  duplication: DuplicationResult;
+  architecture: ArchitectureResult;
 }
