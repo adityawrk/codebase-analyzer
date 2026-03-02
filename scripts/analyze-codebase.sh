@@ -140,15 +140,15 @@ download_and_extract() {
 
 # ── Main ──────────────────────────────────────────────────────────────
 
-if [ $# -lt 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   cat >&2 <<'USAGE'
-Usage: analyze-codebase.sh <repo-path> [options]
+Usage: analyze-codebase.sh [repo-path] [options]
 
 Analyze a codebase and produce a static analysis report.
-Report is saved to your home directory by default.
+Defaults to current directory. Report saved to ~/
 
-Arguments:
-  <repo-path>     Path to the repository to analyze
+One-liner (cd into any repo, then run):
+  bash <(curl -sSL https://gist.githubusercontent.com/adityawrk/fbca749711e84d991358489ee7accecc/raw)
 
 Options (passed through to codebase-analyzer):
   -f, --format <format>     Output format: markdown or json (default: markdown)
@@ -156,27 +156,21 @@ Options (passed through to codebase-analyzer):
   --rubric <path>           Path to custom rubric YAML
   --offline                 Skip external tool calls
   --timeout <ms>            Per-tool timeout in milliseconds (default: 60000)
-  --include <patterns...>   Include glob patterns
-  --exclude <patterns...>   Exclude glob patterns
-  --follow-symlinks         Follow symlinks within repo root
 
 Environment:
   CODEBASE_ANALYZER_VERSION   Override version (default: latest)
   CODEBASE_ANALYZER_CACHE     Cache dir (default: ~/.cache/codebase-analyzer)
-
-Examples:
-  ./analyze-codebase.sh .                               # ~/myrepo_codebase_analysis.md
-  ./analyze-codebase.sh /path/to/repo                   # ~/repo_codebase_analysis.md
-  ./analyze-codebase.sh . -o ./report.md                # Custom output path
-  ./analyze-codebase.sh . --format json                 # ~/myrepo_codebase_analysis.json
-  ./analyze-codebase.sh . --offline
 USAGE
   exit 0
 fi
 
-# Capture repo path and shift to remaining args
-REPO_PATH="$1"
-shift
+# Default to current directory if no repo path given
+if [ $# -ge 1 ] && [[ "${1:-}" != -* ]]; then
+  REPO_PATH="$1"
+  shift
+else
+  REPO_PATH="."
+fi
 
 # Resolve the repo name for the output filename
 REPO_ABS_PATH="$(cd "$REPO_PATH" 2>/dev/null && pwd)" || error "Cannot access: $REPO_PATH"
