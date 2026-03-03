@@ -96,6 +96,7 @@ function makeFullReport(overrides?: Partial<{
       languages: [],
       godFiles,
       largestFiles: [],
+      hasBinaryEntryPoint: false,
     },
     structure: {
       meta: makeMeta(o.structureStatus),

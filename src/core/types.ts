@@ -157,6 +157,8 @@ export interface SizingResult {
   godFiles: GodFile[];
   /** Top 15 files by line count (all files, not just god files) */
   largestFiles: GodFile[];
+  /** True if a binary entry point was detected (main.rs, main.go, main.py with __main__). */
+  hasBinaryEntryPoint: boolean;
 }
 
 // -- Structure --

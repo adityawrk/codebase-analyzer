@@ -38,10 +38,24 @@ interface GitleaksFinding {
  */
 function classifyFindingContext(filePath: string): 'production' | 'test' | 'docs' {
   const lower = filePath.toLowerCase();
-  if (/(?:^|\/)(?:tests?|__tests__|spec|__mocks__)\//i.test(lower) || /\.(?:test|spec)\./i.test(lower)) {
+
+  // Test directories
+  if (/(?:^|\/)(?:tests?|__tests__|spec|__mocks__|testdata|test-fixtures|testutil)\//i.test(lower)) {
     return 'test';
   }
-  if (/(?:^|\/)(?:docs?|examples?|tutorials?|samples?)\//i.test(lower)) {
+  // Test file naming conventions across languages
+  if (
+    /\.(?:test|spec)\./i.test(lower) ||                       // .test. or .spec. (JS/TS/Py)
+    /_test\.go$/i.test(lower) ||                                // Go: *_test.go
+    /(?:^|\/)test_[^/]+\.py$/i.test(lower) ||                  // Python: test_*.py
+    /[^/]_test\.py$/i.test(lower) ||                            // Python: *_test.py
+    /(?:Test|Tests|IT)\.(?:java|kt|scala|groovy)$/i.test(lower) // JVM: *Test.java, *Tests.kt
+  ) {
+    return 'test';
+  }
+
+  // Documentation/example directories
+  if (/(?:^|\/)(?:docs?|docs_src|examples?|tutorials?|samples?|fixtures?|benchmarks?)\//i.test(lower)) {
     return 'docs';
   }
   return 'production';

@@ -35,7 +35,7 @@ const RECENT_COMMITS_LIMIT = 15;
 const SHORT_MESSAGE_THRESHOLD = 10;
 
 /** Regex patterns for test file paths. */
-const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/|(?:^|\/)tests?\/|(?:^|\/)test_)/i;
+const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/|(?:^|\/)tests?\/|(?:^|\/)test_|_test\.go$|(?:Test|Tests)\.(?:java|kt|scala)$|_test\.py$)/i;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,6 +47,10 @@ const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/|(?:^|\/)tests?\/|(?:^|\/)
  * Each line looks like:
  *   "    42\tJane Doe <jane@example.com>"
  */
+/** Known bot name patterns — matched case-insensitively. */
+const BOT_NAME_RE = /\[bot\]$|^dependabot$|^greenkeeper$|^renovate$|^semantic-release-bot$|^snyk-bot$|^github-actions$/i;
+const BOT_EMAIL_RE = /\[bot\]|^github-actions@github\.com$|^noreply@github\.com$|^actions@github\.com$/i;
+
 function parseShortlog(stdout: string): ContributorInfo[] {
   const contributors: ContributorInfo[] = [];
 
@@ -64,20 +68,22 @@ function parseShortlog(stdout: string): ContributorInfo[] {
     const rest = trimmed.slice(tabIdx + 1).trim();
     // Extract name and email from "Name <email>"
     const emailMatch = rest.match(/^(.+?)\s*<([^>]+)>$/);
+    let name: string;
+    let email: string;
     if (emailMatch) {
-      contributors.push({
-        name: emailMatch[1]!.trim(),
-        email: emailMatch[2]!.trim(),
-        commits: count,
-      });
+      name = emailMatch[1]!.trim();
+      email = emailMatch[2]!.trim();
     } else {
-      // No email found — use the whole rest as name
-      contributors.push({
-        name: rest,
-        email: '',
-        commits: count,
-      });
+      name = rest;
+      email = '';
     }
+
+    // Filter out bots by name pattern or bot email pattern
+    if (BOT_NAME_RE.test(name) || BOT_EMAIL_RE.test(email)) {
+      continue;
+    }
+
+    contributors.push({ name, email, commits: count });
   }
 
   return contributors;
@@ -166,15 +172,22 @@ function deduplicateContributors(contributors: ContributorInfo[]): ContributorIn
   const entries: ContributorInfo[] = [];
   const keys: string[] = []; // parallel array of normalized names
   const ghIds: (string | null)[] = []; // parallel array of GitHub user IDs
+  const emails: Set<string>[] = []; // parallel array of email sets for each entry
 
   for (const c of sorted) {
     const norm = c.name.toLowerCase().trim();
     const ghId = GITHUB_NOREPLY_RE.exec(c.email)?.[1] ?? null;
+    const normEmail = c.email.toLowerCase().trim();
 
-    // Find existing entry that matches by name or GitHub user ID
+    // Find existing entry that matches by name, email, or GitHub user ID
     let matchIdx = -1;
     for (let i = 0; i < entries.length; i++) {
       if (namesMatch(norm, keys[i]!)) {
+        matchIdx = i;
+        break;
+      }
+      // Match by email (same person, different display names)
+      if (normEmail && emails[i]!.has(normEmail)) {
         matchIdx = i;
         break;
       }
@@ -191,10 +204,15 @@ function deduplicateContributors(contributors: ContributorInfo[]): ContributorIn
       if (ghId && !ghIds[matchIdx]) {
         ghIds[matchIdx] = ghId;
       }
+      // Track this email for future matching
+      if (normEmail) {
+        emails[matchIdx]!.add(normEmail);
+      }
     } else {
       entries.push({ ...c });
       keys.push(norm);
       ghIds.push(ghId);
+      emails.push(new Set(normEmail ? [normEmail] : []));
     }
   }
 
@@ -502,9 +520,11 @@ export async function analyzeGit(
     nameOnlyResult.exitCode === 0
       ? countCommitsWithTests(nameOnlyResult.stdout)
       : { count: 0, total: 0 };
+  // Use totalCommits as denominator (from rev-list --count) so the displayed
+  // percentage matches "% of All Commits" / "Total Commits" in the report.
   const commitsWithTestsPercent =
-    testsStats.total > 0
-      ? Math.round((testsStats.count / testsStats.total) * 10000) / 100
+    totalCommits > 0
+      ? Math.round((testsStats.count / totalCommits) * 10000) / 100
       : 0;
 
   const elapsed = performance.now() - start;

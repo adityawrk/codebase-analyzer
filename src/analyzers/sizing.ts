@@ -47,6 +47,8 @@ const LANGUAGE_TO_EXTENSION: Record<string, string> = {
   PHP: '.php',
   Dart: '.dart',
   JSON: '.json',
+  JSONL: '.jsonl',
+  JSONC: '.jsonc',
   YAML: '.yaml',
   TOML: '.toml',
   XML: '.xml',
@@ -55,14 +57,20 @@ const LANGUAGE_TO_EXTENSION: Record<string, string> = {
   CSS: '.css',
   SCSS: '.scss',
   SASS: '.sass',
+  Stylus: '.styl',
   LESS: '.less',
   Shell: '.sh',
   Bash: '.sh',
+  BASH: '.sh',
+  'Bourne Shell': '.sh',
   Zsh: '.zsh',
+  Fish: '.fish',
+  Powershell: '.ps1',
   SQL: '.sql',
   GraphQL: '.graphql',
   Dockerfile: '.dockerfile',
   Protobuf: '.proto',
+  'Protocol Buffers': '.proto',
   Lua: '.lua',
   R: '.r',
   Elixir: '.ex',
@@ -72,18 +80,38 @@ const LANGUAGE_TO_EXTENSION: Record<string, string> = {
   Clojure: '.clj',
   Vue: '.vue',
   Svelte: '.svelte',
+  CoffeeScript: '.coffee',
+  Handlebars: '.hbs',
+  Mustache: '.mustache',
+  Pug: '.pug',
+  EJS: '.ejs',
+  Assembly: '.asm',
+  'FORTRAN Legacy': '.f',
+  'FORTRAN Modern': '.f90',
+  ReStructuredText: '.rst',
+  AsciiDoc: '.adoc',
+  'Vim Script': '.vim',
+  'Gherkin Specification': '.feature',
+  'Go Template': '.tmpl',
+  'Smarty Template': '.tpl',
+  'Extensible Stylesheet Language Transformations': '.xslt',
   Makefile: '',
   Plain: '.txt',
   Text: '.txt',
+  'Plain Text': '.txt',
   License: '',
   gitignore: '',
+  'Docker ignore': '',
+  Gemfile: '',
+  Rakefile: '',
   'Properties File': '.properties',
   Batch: '.bat',
   CSV: '.csv',
   SVG: '.svg',
+  INI: '.ini',
+  Patch: '.patch',
   ProGuard: '.pro',
   Gradle: '.gradle',
-  Fish: '.fish',
   'Module-Definition': '.def',
   Autoconf: '.ac',
   m4: '.m4',
@@ -129,6 +157,12 @@ const NON_CODE_SCC_LANGUAGES = new Set([
   'INI', 'Plain',
 ]);
 
+/** Test file patterns — matched against relative path. */
+const TEST_FILE_RE = /(?:\.test\.|\.spec\.|__tests__\/|(?:^|\/)tests?\/|(?:^|\/)test_|_test\.go$|(?:Test|Tests|IT)\.(?:java|kt|scala|groovy)$|_test\.py$)/i;
+
+/** Binary entry point patterns — indicates a CLI tool or application (not a library). */
+const BINARY_ENTRY_PATTERNS = /(?:^|\/)(main\.rs|main\.go|main\.py|__main__\.py)$/;
+
 function extensionForLanguage(languageName: string): string {
   return LANGUAGE_TO_EXTENSION[languageName] ?? '';
 }
@@ -162,6 +196,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
       languages: [],
       godFiles: [],
       largestFiles: [],
+      hasBinaryEntryPoint: false,
     };
   }
 
@@ -184,6 +219,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
       languages: [],
       godFiles: [],
       largestFiles: [],
+      hasBinaryEntryPoint: false,
     };
   }
 
@@ -247,8 +283,8 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
         language: lang.Name,
       };
       allFiles.push(entry);
-      // Skip non-code languages (Markdown, JSON, etc.) for god-file detection
-      if (!NON_CODE_SCC_LANGUAGES.has(lang.Name) && file.Code > GOD_FILE_THRESHOLD) {
+      // Skip non-code languages and test files for god-file detection
+      if (!NON_CODE_SCC_LANGUAGES.has(lang.Name) && file.Code > GOD_FILE_THRESHOLD && !TEST_FILE_RE.test(relPath)) {
         godFiles.push({
           path: relPath,
           lines: file.Code,
@@ -265,6 +301,9 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
   allFiles.sort((a, b) => b.lines - a.lines);
   const largestFiles = allFiles.slice(0, 15);
 
+  // Detect binary entry points from the file index
+  const hasBinaryEntryPoint = index.files.some((f) => BINARY_ENTRY_PATTERNS.test(f.path));
+
   const elapsed = performance.now() - start;
   return {
     meta: { status: 'computed', durationMs: elapsed },
@@ -276,6 +315,7 @@ async function analyzeSizingWithScc(index: RepositoryIndex): Promise<SizingResul
     languages,
     godFiles,
     largestFiles,
+    hasBinaryEntryPoint,
   };
 }
 
@@ -388,6 +428,7 @@ async function analyzeSizingFallback(index: RepositoryIndex): Promise<SizingResu
     languages,
     godFiles,
     largestFiles,
+    hasBinaryEntryPoint: index.files.some((f) => BINARY_ENTRY_PATTERNS.test(f.path)),
   };
 }
 

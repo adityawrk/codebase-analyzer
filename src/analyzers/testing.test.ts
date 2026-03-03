@@ -145,6 +145,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTests — edge cases', () => {
       languages: [],
       godFiles: [],
       largestFiles: [],
+      hasBinaryEntryPoint: false,
     };
     const result = await analyzeTests(index, zeroSizing);
 
@@ -167,6 +168,7 @@ describe.skipIf(SKIP_NON_VITEST)('analyzeTests — edge cases', () => {
       languages: [],
       godFiles: [],
       largestFiles: [],
+      hasBinaryEntryPoint: false,
     };
     const result = await analyzeTests(index, smallSizing);
 

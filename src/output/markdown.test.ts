@@ -76,6 +76,7 @@ function mockSizing(overrides: Partial<SizingResult> = {}): SizingResult {
       { path: 'src/output/markdown.ts', lines: 420, language: 'TypeScript' },
       { path: 'src/analyzers/sizing.ts', lines: 380, language: 'TypeScript' },
     ],
+    hasBinaryEntryPoint: false,
     ...overrides,
   };
 }
@@ -1150,6 +1151,19 @@ describe('formatCodeTypeBreakdown section', () => {
           },
         ],
       }),
+      dependencies: {
+        meta: computedMeta(),
+        totalDependencies: 25,
+        directDependencies: 10,
+        devDependencies: 15,
+        ecosystems: ['npm'],
+        packageManager: 'bun',
+        dependencies: [
+          { name: 'react', version: '^18.2.0', type: 'direct', ecosystem: 'npm' },
+          { name: 'react-dom', version: '^18.2.0', type: 'direct', ecosystem: 'npm' },
+          { name: 'typescript', version: '^5.4.0', type: 'dev', ecosystem: 'npm' },
+        ],
+      },
       testAnalysis: {
         meta: skippedMeta('no tests'),
         testFiles: 0,

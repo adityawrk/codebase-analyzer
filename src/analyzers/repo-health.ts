@@ -58,14 +58,14 @@ const CHECKS: CheckDef[] = [
   {
     id: 'readme',
     name: 'README',
-    filenames: ['README.md', 'README', 'README.txt', 'README.rst'],
-    anyDepth: false,
+    filenames: ['README.md', 'README', 'README.txt', 'README.rst', 'README.markdown'],
+    anyDepth: true,
   },
   {
     id: 'license',
     name: 'LICENSE',
-    filenames: ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'LICENCE.md'],
-    anyDepth: false,
+    filenames: ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'LICENCE.md', 'LICENSE-MIT', 'LICENSE-APACHE', 'UNLICENSE', 'COPYING'],
+    anyDepth: true,
   },
   {
     id: 'ci',
@@ -182,6 +182,15 @@ function findMatches(
         matches.push(file.path);
       }
     }
+  }
+
+  // When matching at any depth, prefer root-level files (fewer path separators = shallower)
+  if (check.anyDepth && matches.length > 1) {
+    matches.sort((a, b) => {
+      const depthA = a.replace(/\\/g, '/').split('/').length;
+      const depthB = b.replace(/\\/g, '/').split('/').length;
+      return depthA - depthB;
+    });
   }
 
   return matches;

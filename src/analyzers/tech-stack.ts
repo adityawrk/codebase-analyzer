@@ -252,7 +252,30 @@ function detectFromPython(
   if (!content) return [];
 
   const entries: TechStackEntry[] = [];
-  const contentLower = content.toLowerCase();
+
+  // Strip out test/dev optional-dependency sections from pyproject.toml to avoid false positives.
+  // e.g. fastapi lists flask in [project.optional-dependencies] tests = [...]
+  let filteredContent = content;
+  if (manifestPath.endsWith('pyproject.toml')) {
+    const testGroupRe = /(?:^|\n)\s*(?:tests?|dev|docs|doc|lint|typing|benchmark)\s*=\s*\[/g;
+    let match;
+    const ranges: [number, number][] = [];
+    while ((match = testGroupRe.exec(filteredContent)) !== null) {
+      // Find matching closing bracket, handling nested brackets like anyio[trio]
+      let depth = 1;
+      let pos = match.index + match[0].length;
+      while (pos < filteredContent.length && depth > 0) {
+        if (filteredContent[pos] === '[') depth++;
+        if (filteredContent[pos] === ']') depth--;
+        pos++;
+      }
+      ranges.push([match.index, pos]);
+    }
+    for (const [start, end] of ranges.reverse()) {
+      filteredContent = filteredContent.slice(0, start) + filteredContent.slice(end);
+    }
+  }
+  const contentLower = filteredContent.toLowerCase();
 
   for (const [pkg, info] of Object.entries(PYTHON_PACKAGES)) {
     // Match package name at word boundaries (requirements.txt lines, pyproject.toml entries)
@@ -602,8 +625,15 @@ export function analyzeTechStack(
     // 3. Detect primary languages from file extensions
     allEntries.push(...detectLanguages(index));
 
-    // 4. Deduplicate
-    const stack = deduplicateEntries(allEntries);
+    // 4. Filter self-referential entries (e.g. FastAPI listing itself)
+    const projectName = path.basename(index.root).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const filtered = allEntries.filter((entry) => {
+      const entryNorm = entry.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return entryNorm !== projectName;
+    });
+
+    // 5. Deduplicate
+    const stack = deduplicateEntries(filtered);
 
     // Sort: group by category, then alphabetically within category
     const categoryOrder: TechStackEntry['category'][] = [

@@ -59,6 +59,7 @@ function emptySizing(): SizingResult {
     languages: [],
     godFiles: [],
     largestFiles: [],
+    hasBinaryEntryPoint: false,
   };
 }
 

@@ -17,10 +17,15 @@ import type {
 // Non-code language filter — used to find the real "top language" for classification
 // ---------------------------------------------------------------------------
 
+/** Languages that are not source code — filtered from Language Breakdown and classification. */
 const NON_CODE_LANGUAGES = new Set([
-  'markdown', 'json', 'yaml', 'toml', 'xml', 'plain text', 'text',
-  'license', 'gitignore', 'svg', 'csv', 'properties file', 'batch',
-  'ini', 'plain',
+  'markdown', 'json', 'jsonl', 'jsonc', 'yaml', 'toml', 'xml',
+  'plain text', 'text', 'plain',
+  'license', 'gitignore', 'docker ignore',
+  'svg', 'csv', 'ini',
+  'properties file', 'batch', 'patch',
+  'gemfile', 'rakefile', 'makefile',
+  'restructuredtext', 'asciidoc',
 ]);
 
 /** JS/TS language set for ESLint/Prettier relevance check */
@@ -28,18 +33,39 @@ const JS_TS_LANGUAGES = new Set([
   'JavaScript', 'TypeScript', 'JSX', 'TSX', 'TypeScript Typings',
 ]);
 
-/** Check if the project has a frontend framework in dependencies or tech stack */
+/** Check if the project has a frontend framework AND actual frontend component files (.tsx/.jsx/.vue/.svelte). */
 function detectHasFrontendFramework(report: ReportData): boolean {
-  // Check tech stack for framework entries
+  if (report.sizing.meta.status !== 'computed') return false;
+
+  // Check 1: Definitive frontend rendering libraries in deps.
+  // react-dom, vue, svelte, @angular/core are ONLY used in browser/UI contexts.
+  // Unlike bare "react" (which Hono uses for JSX typings), these are unambiguous.
+  if (report.dependencies.meta.status === 'computed') {
+    const renderingLibs = new Set(['react-dom', 'vue', 'svelte', '@angular/core', 'solid-js', 'preact']);
+    const hasRenderingLib = report.dependencies.dependencies.some(
+      (dep) => renderingLibs.has(dep.name.toLowerCase()),
+    );
+    if (hasRenderingLib) return true;
+  }
+
+  // Check 2: Explicit frontend component file extensions (.tsx/.jsx/.vue/.svelte).
+  // Note: scc may merge .tsx into "TypeScript", so this check alone is insufficient.
+  const hasFrontendFiles = report.sizing.languages.some(
+    (l) => l.language === 'TSX' || l.language === 'JSX' ||
+      l.extension === '.tsx' || l.extension === '.jsx' ||
+      l.extension === '.vue' || l.extension === '.svelte',
+  );
+  if (!hasFrontendFiles) return false;
+
+  // With frontend files present, check for framework entries
   if (report.techStack.meta.status === 'computed') {
     const frameworkNames = new Set(['react', 'vue', 'svelte', 'angular', 'next.js', 'nuxt', 'remix', 'gatsby', 'solid', 'preact']);
     for (const entry of report.techStack.stack) {
       if (frameworkNames.has(entry.name.toLowerCase())) return true;
     }
   }
-  // Check dependencies for common frontend packages
   if (report.dependencies.meta.status === 'computed') {
-    const frontendPkgs = new Set(['react', 'react-dom', 'vue', 'svelte', '@angular/core', 'next', 'nuxt', 'remix', 'gatsby', 'solid-js', 'preact']);
+    const frontendPkgs = new Set(['react', 'next', 'nuxt', 'remix', 'gatsby']);
     for (const dep of report.dependencies.dependencies) {
       if (frontendPkgs.has(dep.name.toLowerCase())) return true;
     }
@@ -109,12 +135,21 @@ function formatSummary(report: ReportData): string[] {
 
   // Total Lines of Code
   if (report.sizing.meta.status === 'computed') {
-    lines.push(`| Total Lines of Code | ${report.sizing.totalLines} |`);
+    // Use code-only total: sum lines from non-filtered languages only
+    const codeOnlyTotal = report.sizing.languages
+      .filter((l) => !NON_CODE_LANGUAGES.has(l.language.toLowerCase()))
+      .reduce((sum, l) => sum + l.lines, 0);
+    lines.push(`| Total Lines of Code | ${codeOnlyTotal} |`);
   }
 
-  // Languages detected (count)
+  // Languages detected (count) — exclude non-code languages
   if (report.sizing.meta.status === 'computed' && report.sizing.languages.length > 0) {
-    lines.push(`| Languages Detected | ${report.sizing.languages.length} |`);
+    const codeLanguageCount = report.sizing.languages.filter(
+      (l) => !NON_CODE_LANGUAGES.has(l.language.toLowerCase()),
+    ).length;
+    if (codeLanguageCount > 0) {
+      lines.push(`| Languages Detected | ${codeLanguageCount} |`);
+    }
   }
 
   // Test Coverage Ratio
@@ -142,20 +177,30 @@ function formatLanguages(report: ReportData): string[] {
     return [];
   }
 
+  // Filter out non-code languages (License, Plain Text, Markdown, JSON, etc.)
+  const codeLanguages = report.sizing.languages.filter(
+    (l) => !NON_CODE_LANGUAGES.has(l.language.toLowerCase()),
+  );
+  if (codeLanguages.length === 0) return [];
+
+  // Recalculate percentages based on code-only total
+  const codeTotalLines = codeLanguages.reduce((sum, l) => sum + l.codeLines, 0);
+
   const lines: string[] = [];
   lines.push('## Language Breakdown');
   lines.push('| Extension | Files | Lines | % of Code |');
   lines.push('|-----------|-------|-------|-----------|');
-  const sorted = [...report.sizing.languages].sort((a, b) => b.lines - a.lines);
+  const sorted = [...codeLanguages].sort((a, b) => b.lines - a.lines);
   for (const lang of sorted) {
-    const pctRounded = Math.round(lang.percentOfCode);
+    const pct = codeTotalLines > 0 ? Math.round((lang.codeLines / codeTotalLines) * 100) : 0;
     const label = lang.extension || lang.language;
     lines.push(
-      `| ${label.padEnd(10)} | ${String(lang.files).padStart(5)} | ${String(lang.lines).padStart(7)} | ${(String(pctRounded) + '%').padStart(4)} |`,
+      `| ${label.padEnd(10)} | ${String(lang.files).padStart(5)} | ${String(lang.lines).padStart(7)} | ${(String(pct) + '%').padStart(4)} |`,
     );
   }
   lines.push('');
-  lines.push(`**Total Lines of Code:** ${report.sizing.totalLines}`);
+  const totalLinesDisplayed = codeLanguages.reduce((sum, l) => sum + l.lines, 0);
+  lines.push(`**Total Lines of Code:** ${totalLinesDisplayed}`);
   lines.push('');
 
   return lines;
@@ -233,8 +278,203 @@ function classifyLanguageEntry(lang: LanguageBreakdown, hasFrontend: boolean): C
 }
 
 /**
+ * Check for mobile application signals in tech stack.
+ * Only returns true if there are strong app signals (not just SDK presence in a library).
+ */
+function detectMobileApp(report: ReportData): boolean {
+  if (report.techStack.meta.status !== 'computed') return false;
+  const mobileSignals = new Set([
+    'android sdk', 'react native', 'flutter', 'swiftui', 'uikit',
+    'kotlin multiplatform', 'jetpack compose', 'expo',
+  ]);
+  const hasMobileSignal = report.techStack.stack.some((e) => mobileSignals.has(e.name.toLowerCase()));
+  if (!hasMobileSignal) return false;
+
+  // Android SDK alone is insufficient — many JVM libraries support Android without being apps.
+  // Require actual app structure: check for Android manifest or app-level source files.
+  if (report.repoHealth.meta.status === 'computed') {
+    const hasAppManifest = report.repoHealth.checks.some(
+      (c) => c.present && c.path && /AndroidManifest\.xml/i.test(c.path),
+    );
+    if (hasAppManifest) return true;
+  }
+  // Check if the repo has app source directories typical of mobile apps.
+  // Match standalone directory names only — e.g. "app/" but not "android-test-app/".
+  // Tree strings contain box-drawing characters (├── └──).
+  if (report.structure.meta.status === 'computed') {
+    const tree = report.structure.treeString;
+    // Match standalone "app/", "ios/", "android/" directory names — not substrings like "android-test-app/"
+    const hasAppDir = /(?:^|[\s])(?:app|ios|android)\//.test(tree);
+    if (hasAppDir) return true;
+  }
+  // Fallback: non-Android mobile frameworks are strong app signals
+  const strongMobileSignals = new Set(['react native', 'flutter', 'swiftui', 'uikit', 'expo']);
+  return report.techStack.stack.some((e) => strongMobileSignals.has(e.name.toLowerCase()));
+}
+
+/**
+ * Check for library signals: published package without app entry point.
+ * Detects npm libs, PyPI packages, Rust crates, Ruby gems, Go modules.
+ */
+function detectLibrary(report: ReportData): boolean {
+  if (report.dependencies.meta.status !== 'computed') return false;
+
+  const ecosystems = report.dependencies.ecosystems.map((e) => e.toLowerCase());
+
+  // Go modules and Cargo crates are usually libraries (CLI tools caught earlier)
+  if (ecosystems.includes('go') || ecosystems.includes('cargo')) return true;
+
+  // Gradle/Maven: Kotlin/Java libraries (mobile apps caught at Priority 1, frameworks at Priority 2)
+  if (ecosystems.includes('gradle') || ecosystems.includes('maven')) {
+    const topLang = getTopLanguageName(report);
+    if (/^(kotlin|java)$/i.test(topLang)) {
+      // Only classify as library if no web/server framework in tech stack
+      const jvmServerFrameworks = new Set([
+        'spring', 'spring boot', 'ktor', 'micronaut', 'quarkus',
+        'dropwizard', 'play', 'grails', 'vertx', 'spark java',
+      ]);
+      const hasServerFramework = report.techStack.meta.status === 'computed' &&
+        report.techStack.stack.some((e) => jvmServerFrameworks.has(e.name.toLowerCase()));
+      if (!hasServerFramework) return true;
+    }
+  }
+
+  // npm/pypi packages that are NOT apps — detect by absence of app-level frameworks.
+  // Only check DIRECT (non-dev) dependencies — dev deps like express (for testing) shouldn't
+  // prevent library classification for packages like axios or markdown-it.
+  const appFrameworks = new Set([
+    // Node.js backend frameworks
+    'express', 'fastify', 'koa', 'hapi', 'nest', '@nestjs/core',
+    // Python backend frameworks
+    'flask', 'fastapi', 'django', 'tornado', 'starlette',
+    // Ruby frameworks
+    'rails', 'sinatra',
+    // Frontend rendering (already classified as frontend, not library)
+    'react-dom', 'vue', 'svelte', '@angular/core', 'solid-js', 'preact',
+    'next', 'nuxt', 'remix', 'gatsby',
+  ]);
+
+  const hasAppFramework = report.dependencies.dependencies.some(
+    (dep) => dep.type !== 'dev' && appFrameworks.has(dep.name.toLowerCase()),
+  );
+
+  // Don't classify as library if it has frontend rendering signals
+  if (detectHasFrontendFramework(report)) return false;
+
+  // Only apply ecosystem-based library detection when the ecosystem matches the
+  // primary language. Prevents e.g. redis (C server with a few Python test scripts)
+  // from being classified as a Python library.
+  const topLang = getTopLanguageName(report);
+  const ecosystemMatchesLang =
+    (ecosystems.includes('npm') && /typescript|javascript|tsx|jsx/i.test(topLang)) ||
+    (ecosystems.includes('pypi') && /python/i.test(topLang));
+
+  if (!hasAppFramework && ecosystemMatchesLang) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Get the top code language name from sizing data. */
+function getTopLanguageName(report: ReportData): string {
+  if (report.sizing.meta.status !== 'computed' || report.sizing.languages.length === 0) return '';
+  const codeOnly = report.sizing.languages.filter(
+    (l) => !NON_CODE_LANGUAGES.has(l.language.toLowerCase()),
+  );
+  const sorted = [...codeOnly].sort((a, b) => b.codeLines - a.codeLines);
+  return sorted[0]?.language ?? '';
+}
+
+/**
+ * Detect if the project IS a framework (e.g. FastAPI, Hono, Express).
+ * A framework is a published package that other projects depend on — it provides
+ * the same name as its package in its own tech stack (since it IS that thing).
+ */
+function detectFramework(report: ReportData): boolean {
+  if (report.dependencies.meta.status !== 'computed') return false;
+  if (report.techStack.meta.status !== 'computed') return false;
+
+  // Known framework package names that are themselves frameworks
+  const frameworkNames = new Set([
+    'express', 'fastify', 'koa', 'hapi', '@nestjs/core',
+    'flask', 'fastapi', 'django', 'tornado', 'starlette',
+    'actix-web', 'axum', 'rocket', 'warp',
+    'gin', 'echo', 'fiber', 'chi',
+    'rails', 'sinatra',
+    'spring', 'spring boot',
+    'hono',
+  ]);
+
+  // If the project's directory name matches a known framework, it's likely THE framework
+  const repoName = path.basename(report.meta.directory).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return frameworkNames.has(repoName) || [...frameworkNames].some((f) => f.replace(/[^a-z0-9]/g, '') === repoName);
+}
+
+/**
+ * Detect if the project is a CLI tool.
+ * Uses multiple signals: CLI framework deps, binary entry points, and language context.
+ */
+function detectCLITool(report: ReportData): boolean {
+  const topLang = getTopLanguageName(report);
+  const cliLangs = /^(rust|go|c|c\+\+|zig|nim|python)$/i;
+  if (!cliLangs.test(topLang)) return false;
+
+  // If the project IS a CLI/TUI framework/library itself, it's a library not a CLI tool
+  const cliLibNames = new Set([
+    'click', 'typer', 'bubbletea', 'bubble-tea', 'charm', 'ink', 'blessed',
+    'urwid', 'rich', 'textual', 'prompt-toolkit', 'promptui',
+  ]);
+  const repoName = path.basename(report.meta.directory).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (cliLibNames.has(repoName)) return false;
+
+  // No web framework in tech stack
+  const webFrameworks = new Set([
+    'actix web', 'axum', 'rocket', 'warp', 'gin', 'echo', 'fiber', 'chi',
+    'flask', 'fastapi', 'django', 'express', 'fastify',
+  ]);
+  const hasWebFramework = report.techStack.stack.some((e) => webFrameworks.has(e.name.toLowerCase()));
+  if (hasWebFramework) return false;
+
+  // Signal 1: CLI framework deps (strong signal — only direct deps, not optional/dev)
+  const cliFrameworks = new Set([
+    'clap', 'structopt', 'argh',                    // Rust
+    'cobra', 'urfave/cli', 'kingpin',                // Go
+    'argparse', 'click', 'typer',                    // Python
+  ]);
+  if (report.dependencies.meta.status === 'computed') {
+    const hasCLIDep = report.dependencies.dependencies.some(
+      (dep) => dep.type === 'direct' && cliFrameworks.has(dep.name.toLowerCase()),
+    );
+    if (hasCLIDep) return true;
+  }
+
+  // Signal 2: Tech stack has CLI-related entries
+  const cliTechNames = new Set(['clap', 'cobra', 'structopt', 'argparse']);
+  const hasCLITech = report.techStack.meta.status === 'computed' &&
+    report.techStack.stack.some((e) => cliTechNames.has(e.name.toLowerCase()));
+  if (hasCLITech) return true;
+
+  // Signal 3: Binary entry points in folder tree (main.rs, main.go, cmd/)
+  if (report.structure.meta.status === 'computed') {
+    const tree = report.structure.treeString;
+    if (/(?:main\.rs|main\.go|cmd\/)/.test(tree)) return true;
+  }
+
+  // Signal 4: Binary entry point detected in file index (main.rs, main.go)
+  // Only for compiled languages — Python __main__.py is too common in libraries
+  if (report.sizing.meta.status === 'computed' && report.sizing.hasBinaryEntryPoint
+      && /^(rust|go|c|c\+\+|zig|nim)$/i.test(topLang)) return true;
+
+  // Signal 5: For C projects, small codebases with no library signals are likely CLI tools
+  if (/^c$/i.test(topLang) && report.sizing.totalFiles < 50) return true;
+
+  return false;
+}
+
+/**
  * Determine primary classification label from the largest category.
- * Returns a string like "Backend Application" or "Frontend Application".
+ * Returns a string like "Backend Application", "Library", "Mobile Application", etc.
  */
 function determinePrimaryClassification(
   buckets: Map<CodeCategory, CodeTypeBucket>,
@@ -250,6 +490,29 @@ function determinePrimaryClassification(
     if (sorted[0]) topLanguage = sorted[0].language;
   }
 
+  const suffix = topLanguage ? ` (${topLanguage})` : '';
+
+  // Priority 1: Mobile application detection
+  if (detectMobileApp(report)) {
+    return `Mobile Application${suffix}`;
+  }
+
+  // Priority 2: Framework detection (project IS a framework, not just using one)
+  if (detectFramework(report)) {
+    return `Framework${suffix}`;
+  }
+
+  // Priority 3: CLI tool detection
+  if (detectCLITool(report)) {
+    return `CLI Tool${suffix}`;
+  }
+
+  // Priority 4: Library detection (Go/Rust modules are almost always libraries)
+  if (detectLibrary(report)) {
+    return `Library${suffix}`;
+  }
+
+  // Priority 3: Standard category-based classification
   // Find the category with the most lines (excluding Test and Other for primary type)
   const codeCats: CodeCategory[] = ['Frontend', 'Backend', 'Infrastructure', 'Config'];
   let primary: CodeCategory = 'Backend';
@@ -261,8 +524,6 @@ function determinePrimaryClassification(
       primary = cat;
     }
   }
-
-  const suffix = topLanguage ? ` (${topLanguage})` : '';
 
   switch (primary) {
     case 'Frontend':
@@ -910,7 +1171,11 @@ function formatDuplication(report: ReportData): string[] {
       lines.push('|------------|-------|-------------|-------|');
       const topClones = report.duplication.clones.slice(0, 10);
       for (const c of topClones) {
-        lines.push(`| ${c.firstFile}:${c.firstStartLine}-${c.firstEndLine} | ${c.lines} | ${c.secondFile}:${c.secondStartLine}-${c.secondEndLine} | ${c.lines} |`);
+        // Display actual range span for each file — avoids showing impossible
+        // line counts when jscpd's fragment size doesn't match the range.
+        const firstSpan = Math.max(c.firstEndLine - c.firstStartLine + 1, 1);
+        const secondSpan = Math.max(c.secondEndLine - c.secondStartLine + 1, 1);
+        lines.push(`| ${c.firstFile}:${c.firstStartLine}-${c.firstEndLine} | ${firstSpan} | ${c.secondFile}:${c.secondStartLine}-${c.secondEndLine} | ${secondSpan} |`);
       }
       lines.push('');
     }

@@ -71,12 +71,25 @@ describe('analyzeRepoHealth', () => {
     expect(readme!.path).toBe('README.rst');
   });
 
-  it('does not detect README in subdirectory as root README', async () => {
+  it('detects README in subdirectory (anyDepth)', async () => {
     const index = makeMockIndex([makeFile('docs/README.md')]);
     const result = analyzeRepoHealth(index);
 
     const readme = result.checks.find((c) => c.name === 'README');
-    expect(readme!.present).toBe(false);
+    expect(readme!.present).toBe(true);
+    expect(readme!.path).toBe('docs/README.md');
+  });
+
+  it('prefers root-level README over subdirectory README', async () => {
+    const index = makeMockIndex([
+      makeFile('packages/core/README.md'),
+      makeFile('README.md'),
+    ]);
+    const result = analyzeRepoHealth(index);
+
+    const readme = result.checks.find((c) => c.name === 'README');
+    expect(readme!.present).toBe(true);
+    expect(readme!.path).toBe('README.md');
   });
 
   it('detects LICENSE with various names', async () => {
