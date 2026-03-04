@@ -29,5 +29,5 @@ jobs:
       - name: TypeScript compile check
         run: bun run build
 
-      - name: Run unit tests
-        run: bun test --exclude 'tests/golden/**'
+      - name: Run unit tests with coverage
+        run: bun run test:coverage -- --exclude 'tests/golden/**'
