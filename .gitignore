@@ -35,3 +35,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # bun
 bun.lock
+
+# release binaries
+release/
+cba/
+
+# generated reports (keep out of repo)
+codebase_analysis.md
+
+# root-level legacy script (tracked version is in scripts/)
+/analyze-codebase.sh
