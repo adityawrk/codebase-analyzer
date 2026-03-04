@@ -175,6 +175,10 @@
             }
           }
         },
+        "hasBinaryEntryPoint": {
+          "type": "boolean",
+          "description": "Whether the repo has a binary entry point (e.g., compiled CLI binary)"
+        },
         "meta": { "$ref": "#/definitions/analyzerMeta" }
       }
     },
@@ -431,6 +435,10 @@
               "description": {
                 "type": "string",
                 "description": "Human-readable description of the finding"
+              },
+              "context": {
+                "type": "string",
+                "description": "Classification of the finding context (e.g., 'production', 'test', 'config')"
               }
             },
             "additionalProperties": false
