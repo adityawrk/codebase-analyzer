@@ -113,7 +113,7 @@ From the gaps found, rank by user value and suggest which to fix first.
 ## Rules
 
 - This is a read-only comparison. Do NOT modify any files.
-- Reference reference reports are in `stored locally, not in repo`:
+- Reference reference reports are stored locally (not in repo):
   - `ai-startup-tycoon_codebase_analysis.md`
   - `golden-era_codebase_analysis.md`
   - `resolve_codebase_analysis.md`
