@@ -48,7 +48,7 @@
     "scoring"
   ],
   "author": "Aditya Patni <adityapatni2106@gmail.com>",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/adityawrk/codebase-analyzer.git"
