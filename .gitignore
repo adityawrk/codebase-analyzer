@@ -38,7 +38,8 @@ bun.lock
 
 # release binaries
 release/
-cba/
+/cba
+/codebase-analyzer
 
 # generated reports (keep out of repo)
 codebase_analysis.md

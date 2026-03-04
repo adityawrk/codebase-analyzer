@@ -52,7 +52,7 @@ Identify untested critical paths, suggest high-value test targets, and assess te
 
 ## Sections Explicitly Dropped
 
-These LLM-powered sections from reference reports are **not worth replicating** (per analysis in `REVISED-PLAN.md`):
+These LLM-powered sections are **not worth replicating** (per analysis in `REVISED-PLAN.md`):
 
 | Section | Reason for Dropping |
 |---------|-------------------|

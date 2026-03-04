@@ -601,10 +601,10 @@ describe('formatLargestFiles section', () => {
     expect(output).not.toContain('## Largest Files');
   });
 
-  it('uses reference format with backtick-wrapped file paths', () => {
+  it('uses backtick-wrapped file paths in tables', () => {
     const report = mockReport();
     const output = formatMarkdown(report);
-    // Verify the table format matches reference: | `file` | lines |
+    // Verify the table format: | `file` | lines |
     expect(output).toMatch(/\| `[^`]+` \| \d+ \|/);
   });
 });

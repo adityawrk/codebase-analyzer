@@ -1,6 +1,6 @@
 # Codebase Analyzer — Self-hosted Static Analysis CLI
 
-A TypeScript CLI tool that produces reference-equivalent codebase analysis reports without LLM dependency. Orchestrates existing tools (scc, jscpd, gitleaks) + tree-sitter AST parsing to compute static metrics, then outputs scored markdown/JSON reports.
+A TypeScript CLI tool that produces comprehensive codebase analysis reports without LLM dependency. Orchestrates existing tools (scc, jscpd, gitleaks) + tree-sitter AST parsing to compute static metrics, then outputs scored markdown/JSON reports.
 
 ## Stack
 - TypeScript (strict mode, ES2022 target)
@@ -88,12 +88,6 @@ CLI (commander) → Orchestrator → RepositoryIndex (single-pass)
 - **Always**: Research/exploration that would flood the main context
 - **Always**: Long tasks (>5 tool calls) — run in background
 - **Avoid agents only for**: Single-file reads, quick git commands, simple questions
-
-## Reference Reports
-Three reference reports are the format target (stored locally, not in repo):
-- `ai-startup-tycoon_codebase_analysis.md` — TS/React, 54K LOC
-- `golden-era_codebase_analysis.md` — TS/React, 39K LOC
-- `resolve_codebase_analysis.md` — Kotlin/Android, 25K LOC
 
 ## Benchmark Repos
 Pinned in `tests/fixtures/benchmark-manifest.json`. CI rejects unpinned SHAs (`^[0-9a-f]{40}$`).

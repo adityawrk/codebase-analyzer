@@ -289,7 +289,7 @@ export async function analyzeTests(
     const codeLines = totalLines > testLines ? totalLines - testLines : 0;
     // testCodeRatio = testLines / codeLines as a percentage.
     // "What fraction of non-test code is covered by test code?"
-    // Matches reference's "Test/Code Ratio" semantics.
+    // Standard test/code ratio semantics.
     const testCodeRatio = codeLines > 0
       ? Math.round((testLines / codeLines) * 10000) / 100
       : 0;

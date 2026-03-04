@@ -1,6 +1,6 @@
 /**
  * Markdown report formatter.
- * Produces reference-format markdown from ReportData.
+ * Produces structured markdown from ReportData.
  *
  * Each section is a standalone formatter function returning string[].
  * The main `formatMarkdown` concatenates them all.
